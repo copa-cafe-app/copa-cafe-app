@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Copa Café — Gestão inteligente para cafeicultores</title>
+    <meta name="description" content="Copa Café: cotações em tempo real, gestão de lotes, controle de custos, clima e muito mais para o cafeicultor brasileiro.">
+    <link rel="icon" type="image/png" href="icon.png">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+            color: #1A1A1A;
+            background: #F7FAF5;
+            overflow-x: hidden;
+        }
+
+        .hero {
+            background: linear-gradient(135deg, #008542 0%, #006B35 60%, #004D26 100%);
+            color: white;
+            padding: 80px 24px 60px;
+            text-align: center;
+            position: relative;
+        }
+
+        .hero::after {
+            content: '';
+            position: absolute;
+            bottom: -40px;
+            left: 0;
+            right: 0;
+            height: 80px;
+            background: #F7FAF5;
+            border-radius: 50% 50% 0 0 / 100% 100% 0 0;
+        }
+
+        .logo-container {
+            margin-bottom: 24px;
+        }
+
+        .logo-container img {
+            width: 100px;
+            height: 100px;
+            border-radius: 24px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+        }
+
+        .hero h1 {
+            font-size: 42px;
+            font-weight: 800;
+            margin-bottom: 12px;
+            letter-spacing: -0.5px;
+        }
+
+        .hero p {
+            font-size: 20px;
+            opacity: 0.9;
+            max-width: 500px;
+            margin: 0 auto 32px;
+            line-height: 1.5;
+        }
+
+        .badge {
+            display: inline-block;
+            background: rgba(255,255,255,0.15);
+            border: 1px solid rgba(255,255,255,0.3);
+            padding: 10px 24px;
+            border-radius: 50px;
+            font-size: 15px;
+            font-weight: 500;
+            backdrop-filter: blur(4px);
+        }
+
+        .features {
+            padding: 60px 24px 40px;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .features h2 {
+            text-align: center;
+            font-size: 28px;
+            color: #008542;
+            margin-bottom: 40px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 16px;
+            padding: 28px 24px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+            border: 1px solid #EAF2E5;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0,133,66,0.1);
+        }
+
+        .card-icon {
+            font-size: 32px;
+            margin-bottom: 12px;
+        }
+
+        .card h3 {
+            font-size: 18px;
+            color: #006B35;
+            margin-bottom: 8px;
+        }
+
+        .card p {
+            font-size: 15px;
+            color: #666;
+            line-height: 1.5;
+        }
+
+        .about {
+            padding: 40px 24px 60px;
+            max-width: 700px;
+            margin: 0 auto;
+            text-align: center;
+        }
+
+        .about h2 {
+            font-size: 28px;
+            color: #008542;
+            margin-bottom: 16px;
+        }
+
+        .about p {
+            font-size: 16px;
+            color: #666;
+            line-height: 1.7;
+            margin-bottom: 12px;
+        }
+
+        footer {
+            background: #006B35;
+            color: rgba(255,255,255,0.8);
+            text-align: center;
+            padding: 32px 24px;
+            font-size: 14px;
+        }
+
+        footer a {
+            color: #69BE28;
+            text-decoration: none;
+        }
+
+        footer a:hover {
+            text-decoration: underline;
+        }
+
+        .footer-links {
+            margin-bottom: 12px;
+        }
+
+        .footer-links a {
+            margin: 0 12px;
+        }
+
+        @media (max-width: 600px) {
+            .hero { padding: 60px 20px 40px; }
+            .hero h1 { font-size: 32px; }
+            .hero p { font-size: 17px; }
+            .grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <section class="hero">
+        <div class="logo-container">
+            <img src="icon.png" alt="Copa Café">
+        </div>
+        <h1>Copa Café</h1>
+        <p>Gestão inteligente da sua lavoura de café. Cotações, lotes, custos, clima — tudo no seu bolso.</p>
+        <span class="badge">Em breve no Google Play</span>
+    </section>
+
+    <section class="features">
+        <h2>O que o Copa Café faz por você</h2>
+        <div class="grid">
+            <div class="card">
+                <div class="card-icon">📊</div>
+                <h3>Cotações em tempo real</h3>
+                <p>Preços Copa Café, dólar e Bolsa ICE atualizados. Simulador de venda e alertas de preço via WhatsApp.</p>
+            </div>
+            <div class="card">
+                <div class="card-icon">☀️</div>
+                <h3>Clima da fazenda</h3>
+                <p>Previsão do tempo para os próximos 7 dias baseada na localização da sua propriedade.</p>
+            </div>
+            <div class="card">
+                <div class="card-icon">📦</div>
+                <h3>Gestão de lotes</h3>
+                <p>Cadastre lotes com bebida, peneira e cata. QR Code para rastreabilidade e compartilhamento via WhatsApp.</p>
+            </div>
+            <div class="card">
+                <div class="card-icon">🌱</div>
+                <h3>Diário de campo</h3>
+                <p>Registre atividades diárias, acompanhe custos mensais e tenha a previsão do tempo integrada ao calendário.</p>
+            </div>
+            <div class="card">
+                <div class="card-icon">💰</div>
+                <h3>Controle de custos</h3>
+                <p>Registre despesas, escaneie recibos com IA e exporte relatórios em PDF prontos para o Imposto de Renda.</p>
+            </div>
+            <div class="card">
+                <div class="card-icon">🔬</div>
+                <h3>Análise de planta</h3>
+                <p>Tire foto da planta e receba análise por inteligência artificial: pragas, doenças e deficiências nutricionais.</p>
+            </div>
+        </div>
+    </section>
+
+    <section class="about">
+        <h2>Feito para o cafeicultor brasileiro</h2>
+        <p>O Copa Café foi desenvolvido pensando no produtor familiar de café. Interface simples, em português, sem complicação. Da região de Matas de Minas para todo o Brasil.</p>
+        <p>Segurança é prioridade: login com verificação SMS, dados criptografados e em conformidade com a LGPD.</p>
+    </section>
+
+    <footer>
+        <div class="footer-links">
+            <a href="privacy-policy.html">Política de Privacidade</a>
+            <a href="mailto:pedro.vieira.lomar@gmail.com">Contato</a>
+        </div>
+        <p>&copy; 2026 Copa Café. Todos os direitos reservados.</p>
+    </footer>
+</body>
+</html>

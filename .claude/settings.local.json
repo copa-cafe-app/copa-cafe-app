@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:coffeecopa.com)",
+      "WebFetch(domain:docs.google.com)",
+      "WebFetch(domain:economia.awesomeapi.com.br)",
+      "WebFetch(domain:query1.finance.yahoo.com)"
+    ]
+  }
+}

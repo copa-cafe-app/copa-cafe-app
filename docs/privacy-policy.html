@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Política de Privacidade — Copa Café</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.7;
+            color: #1A1A1A;
+            background: #F7FAF5;
+            padding: 24px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        h1 {
+            color: #008542;
+            font-size: 28px;
+            margin-bottom: 8px;
+        }
+        .updated {
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 32px;
+        }
+        h2 {
+            color: #006B35;
+            font-size: 20px;
+            margin-top: 32px;
+            margin-bottom: 12px;
+        }
+        p, li {
+            font-size: 16px;
+            margin-bottom: 12px;
+        }
+        ul {
+            padding-left: 24px;
+        }
+        a { color: #008542; }
+        .footer {
+            margin-top: 48px;
+            padding-top: 24px;
+            border-top: 1px solid #E0D8CC;
+            color: #666;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Política de Privacidade</h1>
+    <p class="updated">Última atualização: 16 de abril de 2026</p>
+
+    <p>O aplicativo <strong>Copa Café</strong> ("nós", "nosso") respeita a privacidade dos seus usuários ("você") e está comprometido com a proteção dos seus dados pessoais, em conformidade com a Lei Geral de Proteção de Dados (LGPD — Lei nº 13.709/2018).</p>
+
+    <h2>1. Dados que coletamos</h2>
+    <p>Coletamos apenas os dados necessários para o funcionamento do aplicativo:</p>
+    <ul>
+        <li><strong>Dados de cadastro:</strong> nome, e-mail, telefone, CPF ou CNPJ, município e estado.</li>
+        <li><strong>Dados da propriedade:</strong> nome da fazenda, município, variedades cultivadas e área.</li>
+        <li><strong>Dados de produção:</strong> lotes de café, atividades de campo, despesas e custos.</li>
+        <li><strong>Localização:</strong> cidade da propriedade rural (para previsão do tempo). Não rastreamos sua localização em tempo real.</li>
+        <li><strong>Imagens:</strong> fotos de plantas (para análise por IA) e fotos de recibos/notas fiscais (para OCR). As imagens são processadas e não são armazenadas permanentemente em nossos servidores.</li>
+    </ul>
+
+    <h2>2. Como usamos seus dados</h2>
+    <ul>
+        <li>Exibir cotações, clima e informações relevantes para sua região.</li>
+        <li>Gerenciar seus lotes, atividades e custos de produção.</li>
+        <li>Gerar relatórios em PDF (ex: despesas para Imposto de Renda).</li>
+        <li>Analisar imagens de plantas para identificação de pragas e doenças.</li>
+        <li>Extrair dados de recibos e notas fiscais via reconhecimento óptico (OCR).</li>
+        <li>Enviar verificações de segurança (código OTP via SMS).</li>
+        <li>Enviar alertas de preço, quando configurados por você.</li>
+    </ul>
+
+    <h2>3. Compartilhamento de dados</h2>
+    <p>Não vendemos seus dados pessoais. Compartilhamos dados apenas com:</p>
+    <ul>
+        <li><strong>Supabase:</strong> infraestrutura de banco de dados e autenticação (servidores seguros).</li>
+        <li><strong>Anthropic (Claude):</strong> processamento de imagens para análise de plantas e OCR de recibos. As imagens são enviadas para processamento e não são retidas.</li>
+        <li><strong>Open-Meteo:</strong> dados de localização da propriedade para previsão do tempo (apenas cidade/município).</li>
+        <li><strong>AwesomeAPI:</strong> consulta de cotações do dólar (sem dados pessoais).</li>
+    </ul>
+
+    <h2>4. Armazenamento e segurança</h2>
+    <ul>
+        <li>Seus dados são armazenados em servidores Supabase com criptografia em trânsito (TLS) e em repouso.</li>
+        <li>CPF/CNPJ são armazenados com proteção adicional.</li>
+        <li>Tokens de autenticação expiram em 15 minutos, com renovação automática segura.</li>
+        <li>Todas as tabelas possuem políticas de segurança em nível de linha (Row Level Security), garantindo que você só acessa seus próprios dados.</li>
+    </ul>
+
+    <h2>5. Seus direitos (LGPD)</h2>
+    <p>Você tem direito a:</p>
+    <ul>
+        <li><strong>Acesso:</strong> consultar quais dados temos sobre você.</li>
+        <li><strong>Correção:</strong> atualizar dados incorretos ou incompletos.</li>
+        <li><strong>Exclusão:</strong> solicitar a remoção dos seus dados e conta.</li>
+        <li><strong>Portabilidade:</strong> exportar seus dados em formato acessível.</li>
+        <li><strong>Revogação:</strong> retirar seu consentimento a qualquer momento.</li>
+    </ul>
+    <p>Para exercer qualquer direito, entre em contato pelo e-mail abaixo.</p>
+
+    <h2>6. Retenção de dados</h2>
+    <p>Seus dados são mantidos enquanto sua conta estiver ativa. Ao solicitar exclusão da conta, seus dados pessoais serão anonimizados ou removidos em até 30 dias, exceto quando houver obrigação legal de retenção.</p>
+
+    <h2>7. Menores de idade</h2>
+    <p>O Copa Café é destinado a maiores de 18 anos. Não coletamos intencionalmente dados de menores de idade.</p>
+
+    <h2>8. Alterações nesta política</h2>
+    <p>Podemos atualizar esta política periodicamente. Notificaremos sobre mudanças significativas através do aplicativo.</p>
+
+    <h2>9. Contato</h2>
+    <p>Para dúvidas sobre privacidade ou exercício dos seus direitos:</p>
+    <ul>
+        <li><strong>E-mail:</strong> pedro.vieira.lomar@gmail.com</li>
+        <li><strong>Responsável:</strong> Pedro Vieira Lomar</li>
+    </ul>
+
+    <div class="footer">
+        <p>&copy; 2026 Copa Café. Todos os direitos reservados.</p>
+    </div>
+</body>
+</html>

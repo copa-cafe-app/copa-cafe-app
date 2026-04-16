@@ -1,0 +1,115 @@
+import { Stack, useRouter, useSegments } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import { useEffect, useState } from 'react';
+import { colors } from '../src/constants/theme';
+import { useAuthStore } from '../src/stores/authStore';
+import { View, ActivityIndicator } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { supabase } from '../src/services/supabase';
+
+function AuthGuard({ children }: { children: React.ReactNode }) {
+  const { user, initialized, profile, initialize, onboardingDone, setOnboardingDone } = useAuthStore();
+  const segments = useSegments();
+  const router = useRouter();
+
+  useEffect(() => {
+    initialize();
+    AsyncStorage.getItem('@copa_cafe_onboarding_done').then((val) => {
+      setOnboardingDone(val === 'true');
+    });
+
+    // Ouvir evento de recuperação de senha (deep link do email)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        router.replace('/redefinir-senha');
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!initialized || onboardingDone === null) return;
+
+    const inAuthGroup = segments[0] === '(auth)';
+    const inCadastro = segments[0] === '(auth)' && (segments as string[])[1] === 'cadastro';
+    const inCadastroConcluido = inCadastro && (segments as string[])[2] === 'concluido';
+    const inOnboarding = segments[0] === 'onboarding';
+    const inRedefinirSenha = segments[0] === 'redefinir-senha';
+
+    if (inRedefinirSenha) return; // Não interferir na redefinição de senha
+    if (inCadastroConcluido) return; // Não interferir na tela de conclusão
+
+    if (!onboardingDone && !inOnboarding) {
+      // Primeiro acesso → onboarding
+      router.replace('/onboarding');
+    } else if (!user && !inAuthGroup && !inOnboarding) {
+      // Não logado → login
+      router.replace('/(auth)/login');
+    } else if (user && !profile && !inCadastro) {
+      // Logado mas sem perfil → completar cadastro
+      router.replace('/(auth)/cadastro/perfil');
+    } else if (user && profile && inAuthGroup) {
+      // Logado com perfil completo → tabs
+      router.replace('/(tabs)');
+    }
+  }, [user, initialized, profile, segments, onboardingDone]);
+
+  if (!initialized || onboardingDone === null) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
+  return <>{children}</>;
+}
+
+export default function RootLayout() {
+  return (
+    <AuthGuard>
+      <StatusBar style="dark" />
+      <Stack
+        screenOptions={{
+          headerStyle: { backgroundColor: colors.background },
+          headerTintColor: colors.primary,
+          headerTitleStyle: { fontWeight: '600' },
+          contentStyle: { backgroundColor: colors.background },
+        }}
+      >
+        <Stack.Screen name="onboarding" options={{ headerShown: false }} />
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="(auth)/login" options={{ headerShown: false }} />
+        <Stack.Screen name="(auth)/sms-login" options={{ title: 'Login por SMS', headerShown: true }} />
+        <Stack.Screen name="(auth)/recuperar-senha" options={{ title: 'Recuperar Senha', headerShown: true }} />
+        <Stack.Screen name="(auth)/cadastro/index" options={{ title: 'Cadastro', headerShown: true }} />
+        <Stack.Screen name="(auth)/cadastro/verificacao" options={{ title: 'Verificação', headerShown: true }} />
+        <Stack.Screen name="(auth)/cadastro/perfil" options={{ title: 'Seus Dados', headerShown: true }} />
+        <Stack.Screen name="(auth)/cadastro/fazenda" options={{ title: 'Sua Fazenda', headerShown: true }} />
+        <Stack.Screen name="(auth)/cadastro/termos" options={{ title: 'Termos', headerShown: true }} />
+        <Stack.Screen name="(auth)/cadastro/concluido" options={{ headerShown: false }} />
+        <Stack.Screen name="diario" options={{ headerShown: false }} />
+        <Stack.Screen name="perfil-dados" options={{ headerShown: false }} />
+        <Stack.Screen name="perfil-propriedade" options={{ headerShown: false }} />
+        <Stack.Screen name="perfil-seguranca" options={{ headerShown: false }} />
+        <Stack.Screen name="perfil-privacidade" options={{ headerShown: false }} />
+        <Stack.Screen name="perfil-ajuda" options={{ headerShown: false }} />
+        <Stack.Screen name="perfil-sobre" options={{ headerShown: false }} />
+        <Stack.Screen name="novo-lote" options={{ headerShown: false }} />
+        <Stack.Screen name="talhoes" options={{ headerShown: false }} />
+        <Stack.Screen name="custos" options={{ headerShown: false }} />
+        <Stack.Screen name="nova-despesa" options={{ headerShown: false }} />
+        <Stack.Screen name="analise-planta" options={{ headerShown: false }} />
+        <Stack.Screen name="simulador-venda" options={{ headerShown: false }} />
+        <Stack.Screen name="alertas-preco" options={{ headerShown: false }} />
+        <Stack.Screen name="notificacoes" options={{ headerShown: false }} />
+        <Stack.Screen name="lote-detalhe" options={{ headerShown: false }} />
+        <Stack.Screen name="marketplace" options={{ headerShown: false }} />
+        <Stack.Screen name="produto-detalhe" options={{ headerShown: false }} />
+        <Stack.Screen name="carrinho" options={{ headerShown: false }} />
+        <Stack.Screen name="certificacoes" options={{ headerShown: false }} />
+        <Stack.Screen name="redefinir-senha" options={{ title: 'Redefinir Senha', headerShown: false }} />
+      </Stack>
+    </AuthGuard>
+  );
+}

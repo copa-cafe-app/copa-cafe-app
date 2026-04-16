@@ -1,0 +1,48 @@
+export const coffeeVarieties = [
+  'Arábica - Bourbon',
+  'Arábica - Catuaí',
+  'Arábica - Mundo Novo',
+  'Arábica - Icatu',
+  'Arábica - Obatã',
+  'Arábica - Topázio',
+  'Arábica - Acaiá',
+  'Arábica - Catucaí',
+  'Arábica - Paraíso',
+  'Arábica - Geisha',
+  'Arábica - Typica',
+  'Conilon - Vitória',
+  'Conilon - Diamante',
+  'Conilon - Jequitibá',
+  'Robusta Amazônico',
+  'Outro',
+];
+
+export const coffeeRegions = [
+  'Sul de Minas',
+  'Cerrado Mineiro',
+  'Matas de Minas',
+  'Chapada de Minas',
+  'Mogiana Paulista',
+  'Alta Mogiana',
+  'Norte Pioneiro do Paraná',
+  'Espírito Santo - Arábica',
+  'Espírito Santo - Conilon',
+  'Bahia - Chapada Diamantina',
+  'Bahia - Planalto',
+  'Rondônia',
+  'Rio de Janeiro - Região Serrana',
+  'Goiás',
+  'Outra',
+];
+
+export const certificationTypes = [
+  'UTZ / Rainforest Alliance',
+  'Orgânico Brasil',
+  'Fairtrade',
+  '4C',
+  'Certifica Minas',
+  'BSCA',
+  'C.A.F.E. Practices (Starbucks)',
+  'Nespresso AAA',
+  'Outro',
+];

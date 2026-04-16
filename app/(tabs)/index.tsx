@@ -1,0 +1,597 @@
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, RefreshControl } from 'react-native';
+import { Feather } from '@expo/vector-icons';
+import { useEffect, useState, useCallback, useMemo } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import { colors, spacing, fontSize, borderRadius } from '../../src/constants/theme';
+import { useWeatherStore } from '../../src/stores/weatherStore';
+import { useAuthStore } from '../../src/stores/authStore';
+import { supabase } from '../../src/services/supabase';
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../../src/constants/config';
+import { userService } from '../../src/services/user.service';
+import { Propriedade } from '../../src/types/user';
+
+function QuickActionButton({ icon, label, onPress }: { icon: string; label: string; onPress?: () => void }) {
+  return (
+    <TouchableOpacity style={styles.quickAction} onPress={onPress}>
+      <View style={styles.quickActionIcon}>
+        <Feather name={icon as any} size={22} color={colors.primary} />
+      </View>
+      <Text style={styles.quickActionLabel}>{label}</Text>
+    </TouchableOpacity>
+  );
+}
+
+function InfoCard({ title, children, icon }: { title: string; children: React.ReactNode; icon: string }) {
+  return (
+    <View style={styles.card}>
+      <View style={styles.cardHeader}>
+        <Feather name={icon as any} size={18} color={colors.primaryLight} />
+        <Text style={styles.cardTitle}>{title}</Text>
+      </View>
+      {children}
+    </View>
+  );
+}
+
+function getGreeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Bom dia!';
+  if (hour < 18) return 'Boa tarde!';
+  return 'Boa noite!';
+}
+
+// Copa Café prices — same data feed used by coffeecopa.com/precos.html
+// The website renders client-side from this Google Sheets CSV; we fetch it directly.
+const COPA_CAFE_PRICES_URL = 'https://docs.google.com/spreadsheets/d/1wNX2fPobme6rAE869H8Zrv82K8eCjaDadE30DHU48tc/gviz/tq?tqx=out:csv&sheet=tabela';
+
+function parseCSV(csv: string): string[][] {
+  const rows: string[][] = [];
+  let current = '';
+  let inQuotes = false;
+  let row: string[] = [];
+  for (let i = 0; i < csv.length; i++) {
+    const ch = csv[i];
+    if (ch === '"') {
+      if (inQuotes && csv[i + 1] === '"') { current += '"'; i++; }
+      else { inQuotes = !inQuotes; }
+    } else if (ch === ',' && !inQuotes) {
+      row.push(current.trim()); current = '';
+    } else if ((ch === '\n' || ch === '\r') && !inQuotes) {
+      if (current || row.length > 0) { row.push(current.trim()); rows.push(row); row = []; current = ''; }
+      if (ch === '\r' && csv[i + 1] === '\n') i++;
+    } else { current += ch; }
+  }
+  if (current || row.length > 0) { row.push(current.trim()); rows.push(row); }
+  return rows;
+}
+
+export default function HomeScreen() {
+  const { weather, cityName, loading: weatherLoading, fetchWeather, fetchWeatherByCity } = useWeatherStore();
+  const { profile, user } = useAuthStore();
+  const [safraStats, setSafraStats] = useState({ total: 0, vendidos: 0, receita: 0 });
+  const [cotacoes, setCotacoes] = useState<{ kcCentsLb: number; kcVar: number; dolar: number; dolarVar: number } | null>(null);
+  const [copaCafePrice, setCopaCafePrice] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [propriedades, setPropriedades] = useState<Propriedade[]>([]);
+  const [selectedPropId, setSelectedPropId] = useState<string | null>(null);
+
+  const selectedProp = useMemo(
+    () => propriedades.find((p) => p.id === selectedPropId) ?? null,
+    [propriedades, selectedPropId]
+  );
+
+  const uniqueMunicipios = useMemo(() => {
+    return [...new Set(propriedades.map((p) => p.municipio).filter(Boolean))];
+  }, [propriedades]);
+
+  const showPropSelector = uniqueMunicipios.length >= 2;
+
+  const fetchWeatherForProp = useCallback(
+    (prop: Propriedade | null) => {
+      if (prop?.municipio) {
+        return fetchWeatherByCity(prop.municipio, prop.estado);
+      }
+      return fetchWeather(user?.id);
+    },
+    [fetchWeatherByCity, fetchWeather, user?.id]
+  );
+
+  const fetchCotacoes = useCallback(() => {
+    fetch(`${SUPABASE_URL}/functions/v1/coffee-prices`, {
+      headers: { 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.bolsa && data.cambio) {
+          setCotacoes({
+            kcCentsLb: data.bolsa.cents_per_lb,
+            kcVar: data.bolsa.variacao_percent,
+            dolar: data.cambio.usd_brl,
+            dolarVar: data.cambio.variacao_percent,
+          });
+        }
+      })
+      .catch(() => setCotacoes(null));
+  }, []);
+
+  const fetchCopaCafePrice = useCallback(() => {
+    fetch(COPA_CAFE_PRICES_URL)
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.text();
+      })
+      .then((csv) => {
+        const rows = parseCSV(csv);
+        for (let i = 2; i < rows.length; i++) {
+          const row = rows[i];
+          if (!row || row.length < 5) continue;
+          const tipo = (row[2] || '').trim().toLowerCase();
+          const cata = (row[3] || '').trim();
+          const preco = (row[4] || '').trim();
+          if (tipo.includes('duro') && cata.includes('20') && preco && preco.includes('R$')) {
+            setCopaCafePrice(preco);
+            return;
+          }
+        }
+        for (let i = 2; i < rows.length; i++) {
+          const row = rows[i];
+          if (!row || row.length < 5) continue;
+          const tipo = (row[2] || '').trim().toLowerCase();
+          const cata = (row[3] || '').trim();
+          const preco = (row[4] || '').trim();
+          if (!tipo.includes('rio') && cata.includes('20') && preco && preco.includes('R$')) {
+            setCopaCafePrice(preco);
+            return;
+          }
+        }
+        for (let i = 2; i < rows.length; i++) {
+          const row = rows[i];
+          if (!row || row.length < 5) continue;
+          const cata = (row[3] || '').trim();
+          const preco = (row[4] || '').trim();
+          if (cata.includes('20') && preco && preco.includes('R$')) {
+            setCopaCafePrice(preco);
+            return;
+          }
+        }
+      })
+      .catch(() => setCopaCafePrice(null));
+  }, []);
+
+  const fetchSafraStats = useCallback(() => {
+    if (!user?.id) return;
+    supabase
+      .from('lotes')
+      .select('status, quantidade_sacas, preco_por_saca')
+      .eq('produtor_id', user.id)
+      .then(({ data }) => {
+        if (!data) return;
+        const total = data.length;
+        const vendidos = data.filter((l: any) => l.status === 'VENDIDO').length;
+        const receita = data
+          .filter((l: any) => l.status === 'VENDIDO' && l.preco_por_saca)
+          .reduce((sum: number, l: any) => sum + (l.quantidade_sacas * l.preco_por_saca), 0);
+        setSafraStats({ total, vendidos, receita });
+      });
+  }, [user?.id]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([
+        fetchWeatherForProp(selectedProp),
+        fetchCotacoes(),
+        fetchCopaCafePrice(),
+        fetchSafraStats(),
+      ]);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [fetchWeatherForProp, selectedProp, fetchCotacoes, fetchCopaCafePrice, fetchSafraStats]);
+
+  useEffect(() => {
+    fetchCotacoes();
+    fetchCopaCafePrice();
+
+    if (user?.id) {
+      userService.getPropriedades(user.id).then((props) => {
+        setPropriedades(props);
+        if (props.length > 0) {
+          setSelectedPropId(props[0].id);
+          // Fetch weather by city of first property
+          if (props[0].municipio) {
+            fetchWeatherByCity(props[0].municipio, props[0].estado);
+          } else {
+            fetchWeather(user?.id);
+          }
+        } else {
+          fetchWeather(user?.id);
+        }
+      }).catch(() => {
+        fetchWeather(user?.id);
+      });
+    } else {
+      fetchWeather(user?.id);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchSafraStats();
+    }, [fetchSafraStats])
+  );
+
+  return (
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />}
+    >
+      {/* Header com logo */}
+      <View style={styles.header}>
+        <Image
+          source={require('../../assets/vertical.png')}
+          style={styles.headerLogo}
+          resizeMode="contain"
+        />
+        <View style={{ flex: 1 }}>
+          <Text style={styles.greetingText}>{getGreeting()}</Text>
+          <Text style={styles.greetingName}>{profile?.nome?.split(' ')[0] || 'Produtor'}</Text>
+        </View>
+        <TouchableOpacity style={styles.notifButton} onPress={() => router.push('/notificacoes')}>
+          <Feather name="bell" size={22} color={colors.primary} />
+        </TouchableOpacity>
+      </View>
+
+      {/* Seletor de propriedade (só aparece com 2+ municípios distintos) */}
+      {showPropSelector && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.propScroll}
+          contentContainerStyle={styles.propScrollContent}
+        >
+          {propriedades.map((prop) => {
+            const isSelected = prop.id === selectedPropId;
+            return (
+              <TouchableOpacity
+                key={prop.id}
+                style={[styles.propPill, isSelected && styles.propPillSelected]}
+                onPress={() => {
+                  setSelectedPropId(prop.id);
+                  if (prop.municipio) {
+                    fetchWeatherByCity(prop.municipio, prop.estado);
+                  } else {
+                    fetchWeather(user?.id);
+                  }
+                }}
+              >
+                <Text style={[styles.propPillText, isSelected && styles.propPillTextSelected]}>
+                  {prop.nome}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      )}
+
+      {/* Cotação do dia */}
+      <TouchableOpacity
+        activeOpacity={0.7}
+        onPress={() => router.push('/(tabs)/cotacoes')}
+      >
+        <InfoCard title="Cotação do Dia" icon="trending-up">
+          {/* Copa Café - destaque principal */}
+          <View style={styles.copaCafeMain}>
+            <View style={styles.copaCafeIconCircle}>
+              <Feather name="coffee" size={18} color={colors.white} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.copaCafeLabel}>Copa Café — Cata 20</Text>
+              <Text style={styles.copaCafeSubLabel}>Bebida (Duro) · Compra</Text>
+            </View>
+            <Text style={styles.copaCafeValue}>
+              {copaCafePrice || '...'}
+            </Text>
+          </View>
+
+          {/* KC e Dólar - secundário */}
+          <View style={styles.cotacaoSecondaryRow}>
+            <View style={styles.cotacaoSecondaryItem}>
+              <Text style={styles.cotacaoSecondaryLabel}>KC=F (cts/lb)</Text>
+              <Text style={styles.cotacaoSecondaryValue}>
+                {cotacoes ? `${cotacoes.kcCentsLb.toFixed(2)}` : '...'}
+              </Text>
+              <Text style={[styles.cotacaoSecondaryChange, { color: (cotacoes?.kcVar ?? 0) >= 0 ? colors.primaryLight : colors.error }]}>
+                {cotacoes ? `${cotacoes.kcVar >= 0 ? '+' : ''}${cotacoes.kcVar}%` : ''}
+              </Text>
+            </View>
+            <View style={styles.cotacaoSecondaryDivider} />
+            <View style={styles.cotacaoSecondaryItem}>
+              <Text style={styles.cotacaoSecondaryLabel}>Dólar</Text>
+              <Text style={styles.cotacaoSecondaryValue}>
+                {cotacoes ? `R$ ${cotacoes.dolar.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '...'}
+              </Text>
+              <Text style={[styles.cotacaoSecondaryChange, { color: (cotacoes?.dolarVar ?? 0) >= 0 ? colors.primaryLight : colors.error }]}>
+                {cotacoes ? `${cotacoes.dolarVar >= 0 ? '+' : ''}${cotacoes.dolarVar}%` : ''}
+              </Text>
+            </View>
+          </View>
+        </InfoCard>
+      </TouchableOpacity>
+
+      {/* Clima */}
+      <TouchableOpacity activeOpacity={0.7} onPress={() => router.push('/previsao')}>
+        <InfoCard title={cityName ? `Clima — ${cityName}` : selectedProp?.municipio ? `Clima — ${selectedProp.municipio}` : 'Clima Hoje'} icon="cloud">
+          {weatherLoading ? (
+            <View style={styles.climaLoading}>
+              <ActivityIndicator color={colors.primary} />
+              <Text style={styles.climaLoadingText}>Buscando clima...</Text>
+            </View>
+          ) : weather ? (
+            <View style={styles.climaRow}>
+              <Text style={styles.climaTemp}>{weather.temperature}°C</Text>
+              <View style={styles.climaDetails}>
+                <Text style={styles.climaDetail}>Umidade: {weather.humidity}%</Text>
+                <Text style={styles.climaDetail}>Chuva: {weather.rainProbability}%</Text>
+                <Text style={styles.climaDetail}>Vento: {weather.windSpeed} km/h</Text>
+              </View>
+            </View>
+          ) : (
+            <TouchableOpacity onPress={() => fetchWeatherForProp(selectedProp)}>
+              <Text style={styles.climaDetail}>Toque para carregar o clima</Text>
+            </TouchableOpacity>
+          )}
+        </InfoCard>
+      </TouchableOpacity>
+
+      {/* Resumo da Safra - só exibe quando há lotes */}
+      {safraStats.total > 0 && (
+        <InfoCard title="Safra 2025/26" icon="bar-chart-2">
+          <View style={styles.safraGrid}>
+            <View style={styles.safraItem}>
+              <Text style={styles.safraNumber}>{safraStats.total}</Text>
+              <Text style={styles.safraLabel}>Lotes</Text>
+            </View>
+            <View style={styles.safraItem}>
+              <Text style={styles.safraNumber}>{safraStats.vendidos}</Text>
+              <Text style={styles.safraLabel}>Vendidos</Text>
+            </View>
+            <View style={styles.safraItem}>
+              <Text style={styles.safraNumber}>
+                {safraStats.receita > 0 ? `R$ ${(safraStats.receita / 1000).toFixed(0)}k` : 'R$ 0'}
+              </Text>
+              <Text style={styles.safraLabel}>Receita</Text>
+            </View>
+          </View>
+        </InfoCard>
+      )}
+
+      {/* Atalhos Rápidos */}
+      <Text style={styles.sectionTitle}>Atalhos Rápidos</Text>
+      <View style={styles.quickActions}>
+        <QuickActionButton icon="plus-circle" label="Novo Lote" onPress={() => router.push('/novo-lote')} />
+        <QuickActionButton icon="edit-3" label="Atividade" onPress={() => router.push('/diario')} />
+        <QuickActionButton icon="camera" label="Saúde Planta" onPress={() => router.push('/analise-planta')} />
+        <QuickActionButton icon="shopping-bag" label="Insumos" onPress={() => router.push('/marketplace')} />
+      </View>
+    </ScrollView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  content: {
+    padding: spacing.md,
+    paddingBottom: spacing.xxl,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.lg,
+    paddingTop: spacing.md,
+  },
+  headerLogo: {
+    width: 56,
+    height: 56,
+    marginRight: spacing.md,
+    borderRadius: borderRadius.md,
+  },
+  greetingText: {
+    fontSize: fontSize.sm,
+    color: colors.textSecondary,
+  },
+  greetingName: {
+    fontSize: fontSize.xl,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  notifButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.surfaceVariant,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  card: {
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  cardTitle: {
+    fontSize: fontSize.md,
+    fontWeight: '600',
+    color: colors.text,
+    marginLeft: spacing.sm,
+  },
+  // Copa Café destaque principal
+  copaCafeMain: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surfaceVariant,
+    borderRadius: borderRadius.md,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+    gap: spacing.sm,
+  },
+  copaCafeIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  copaCafeLabel: {
+    fontSize: fontSize.md,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  copaCafeSubLabel: {
+    fontSize: fontSize.xs,
+    color: colors.textSecondary,
+    marginTop: 1,
+  },
+  copaCafeValue: {
+    fontSize: fontSize.xl,
+    fontWeight: '800',
+    color: colors.primary,
+  },
+  // KC e Dólar secundário
+  cotacaoSecondaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  cotacaoSecondaryItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  cotacaoSecondaryLabel: {
+    fontSize: fontSize.xs,
+    color: colors.textSecondary,
+    marginBottom: 2,
+  },
+  cotacaoSecondaryValue: {
+    fontSize: fontSize.md,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  cotacaoSecondaryChange: {
+    fontSize: fontSize.xs,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  cotacaoSecondaryDivider: {
+    width: 1,
+    height: 32,
+    backgroundColor: colors.border,
+  },
+  climaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  climaTemp: {
+    fontSize: 42,
+    fontWeight: '700',
+    color: colors.primary,
+    marginRight: spacing.lg,
+  },
+  climaDetails: {
+    flex: 1,
+  },
+  climaDetail: {
+    fontSize: fontSize.sm,
+    color: colors.textSecondary,
+    marginBottom: 2,
+  },
+  climaLoading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  climaLoadingText: {
+    fontSize: fontSize.sm,
+    color: colors.textSecondary,
+  },
+  safraGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  safraItem: {
+    alignItems: 'center',
+  },
+  safraNumber: {
+    fontSize: fontSize.xl,
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  safraLabel: {
+    fontSize: fontSize.xs,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  sectionTitle: {
+    fontSize: fontSize.lg,
+    fontWeight: '600',
+    color: colors.text,
+    marginTop: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  quickActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  quickAction: {
+    alignItems: 'center',
+    width: 76,
+  },
+  quickActionIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: borderRadius.lg,
+    backgroundColor: colors.surfaceVariant,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.xs,
+  },
+  quickActionLabel: {
+    fontSize: fontSize.xs,
+    color: colors.textSecondary,
+    textAlign: 'center',
+  },
+  propScroll: {
+    marginBottom: spacing.md,
+  },
+  propScrollContent: {
+    gap: spacing.sm,
+  },
+  propPill: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.full ?? 999,
+    backgroundColor: colors.surfaceVariant,
+  },
+  propPillSelected: {
+    backgroundColor: colors.primary,
+  },
+  propPillText: {
+    fontSize: fontSize.sm,
+    color: colors.textSecondary,
+    fontWeight: '500',
+  },
+  propPillTextSelected: {
+    color: colors.white,
+  },
+});
