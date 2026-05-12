@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Redefinir senha — Copa Café</title>
+    <link rel="icon" type="image/png" href="icon.png">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #008542 0%, #006B35 100%);
+            color: white;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+        }
+        .card {
+            background: white;
+            color: #1A1A1A;
+            border-radius: 16px;
+            padding: 40px 28px;
+            max-width: 420px;
+            width: 100%;
+            text-align: center;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+        }
+        .logo {
+            width: 72px;
+            height: 72px;
+            margin: 0 auto 20px;
+            background: #F7FAF5;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 36px;
+        }
+        h1 { font-size: 22px; margin-bottom: 12px; color: #008542; }
+        p { font-size: 15px; line-height: 1.5; color: #555; margin-bottom: 20px; }
+        .btn {
+            display: inline-block;
+            background: #008542;
+            color: white;
+            text-decoration: none;
+            padding: 14px 28px;
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: 15px;
+            margin: 8px 4px;
+            border: none;
+            cursor: pointer;
+        }
+        .btn-secondary {
+            background: transparent;
+            color: #008542;
+            border: 2px solid #008542;
+        }
+        .error { color: #C62828; background: #FFEBEE; padding: 12px; border-radius: 8px; font-size: 14px; }
+        .small { font-size: 13px; color: #888; margin-top: 16px; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="logo">☕</div>
+        <div id="content">
+            <h1>Abrindo o Copa Café...</h1>
+            <p>Estamos te redirecionando para o app para você definir sua nova senha.</p>
+            <button class="btn" onclick="openApp()">Abrir no app</button>
+            <p class="small">Se o app não abrir automaticamente, toque no botão acima.</p>
+        </div>
+        <div id="fallback" style="display:none;">
+            <h1>Link inválido</h1>
+            <p class="error" id="errorMsg">Este link de recuperação não contém os dados necessários. Solicite um novo link no app.</p>
+            <a href="index.html" class="btn btn-secondary">Voltar ao site</a>
+        </div>
+    </div>
+
+    <script>
+        (function () {
+            // O Supabase manda os tokens no fragment (#) da URL, não em query (?).
+            var hash = window.location.hash.replace(/^#/, '');
+            var query = window.location.search.replace(/^\?/, '');
+
+            // Casos:
+            // 1. ?error=...&error_description=... → link expirou ou erro
+            // 2. #access_token=...&refresh_token=...&type=recovery → tudo certo
+            var queryParams = new URLSearchParams(query);
+            if (queryParams.get('error')) {
+                showError(decodeURIComponent(queryParams.get('error_description') || 'Link expirado ou inválido.').replace(/\+/g, ' '));
+                return;
+            }
+
+            if (!hash || hash.indexOf('access_token') === -1) {
+                showError('Este link não contém dados válidos de recuperação.');
+                return;
+            }
+
+            // Monta o deep link pro app standalone
+            var deepLink = 'copa-cafe://redefinir-senha#' + hash;
+            window._deepLink = deepLink;
+
+            // Tenta abrir automaticamente
+            window.location.href = deepLink;
+
+            // Depois de 2s, oferece o botão de retry caso o usuário não tenha o app
+            setTimeout(function () {
+                var p = document.querySelector('#content .small');
+                if (p) p.innerHTML = 'O app não abriu? <a href="https://play.google.com/store/apps/details?id=com.copacafe.app" style="color:#008542;font-weight:600;">Instalar Copa Café</a>';
+            }, 2500);
+        })();
+
+        function openApp() {
+            if (window._deepLink) window.location.href = window._deepLink;
+        }
+
+        function showError(msg) {
+            document.getElementById('content').style.display = 'none';
+            document.getElementById('fallback').style.display = 'block';
+            document.getElementById('errorMsg').textContent = msg;
+        }
+    </script>
+</body>
+</html>

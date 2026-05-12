@@ -5,6 +5,7 @@ import { colors } from '../src/constants/theme';
 import { useAuthStore } from '../src/stores/authStore';
 import { View, ActivityIndicator } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Linking from 'expo-linking';
 import { supabase } from '../src/services/supabase';
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
@@ -18,13 +19,35 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
       setOnboardingDone(val === 'true');
     });
 
-    // Ouvir evento de recuperação de senha (deep link do email)
+    // Ouvir evento de recuperação de senha (após setSession abaixo, o Supabase
+    // emite PASSWORD_RECOVERY automaticamente)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'PASSWORD_RECOVERY') {
         router.replace('/redefinir-senha');
       }
     });
-    return () => subscription.unsubscribe();
+
+    // Captura tokens do deep link (copa-cafe://redefinir-senha#access_token=...&type=recovery)
+    // O email do Supabase abre a página web em docs/redefinir-senha.html que faz o redirect
+    // pra esse scheme, trazendo os tokens no fragment.
+    const handleDeepLink = async (url: string | null) => {
+      if (!url || url.indexOf('#') === -1) return;
+      const fragment = url.split('#')[1];
+      const params = new URLSearchParams(fragment);
+      const accessToken = params.get('access_token');
+      const refreshToken = params.get('refresh_token');
+      const type = params.get('type');
+      if (type === 'recovery' && accessToken && refreshToken) {
+        await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+      }
+    };
+    Linking.getInitialURL().then(handleDeepLink);
+    const linkingSub = Linking.addEventListener('url', ({ url }) => handleDeepLink(url));
+
+    return () => {
+      subscription.unsubscribe();
+      linkingSub.remove();
+    };
   }, []);
 
   useEffect(() => {

@@ -149,9 +149,11 @@ export const authService = {
   },
 
   // Recuperação de senha
+  // O link no email aponta pra página web fixa que redireciona via deep link copa-cafe://
+  // (Expo Go usa o scheme do app já em dev — confere com `Linking.createURL('redefinir-senha')`)
   async resetPassword(email: string) {
     const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: Linking.createURL('redefinir-senha'),
+      redirectTo: 'https://copa-cafe-app.github.io/copa-cafe-app/redefinir-senha.html',
     });
     if (error) throw error;
     return data;
