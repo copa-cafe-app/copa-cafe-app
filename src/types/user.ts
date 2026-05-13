@@ -27,6 +27,7 @@ export interface User {
   ultimo_login?: string;
   aceite_termos: string;
   aceite_privacidade: string;
+  skip_2fa?: boolean;
 }
 
 export interface Propriedade {

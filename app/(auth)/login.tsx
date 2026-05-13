@@ -55,10 +55,13 @@ export default function LoginScreen() {
       await signIn(email, password);
       // Buscar telefone do perfil pra enviar OTP (2FA)
       const { profile, user } = useAuthStore.getState();
-      if (profile?.telefone) {
+      if (profile?.telefone && !profile?.skip_2fa) {
         setUserPhone(profile.telefone);
         await useAuthStore.getState().sendOtp(profile.telefone, 'sms');
         setStep('otp');
+      } else if (profile?.skip_2fa) {
+        // Conta com 2FA desativado (review/suporte): entra direto
+        router.replace('/(tabs)');
       } else {
         // Sem perfil = novo usuário, auth guard redireciona
         router.replace('/(auth)/cadastro/perfil');
