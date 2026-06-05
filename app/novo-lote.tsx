@@ -10,6 +10,7 @@ import { coffeeVarieties } from '../src/constants/varieties';
 const PROCESSOS = ['Natural', 'Lavado', 'Honey', 'Descascado', 'Cereja Descascado'];
 const SAFRAS = ['2026/27', '2025/26', '2024/25'];
 const BEBIDAS = ['Estritamente Mole', 'Mole', 'Apenas Mole', 'Dura', 'Riada', 'Rio', 'Rio Zona'];
+const PENEIRAS = ['17/18', '16/17', '15/16', '14/15', '13', 'Moka', 'Bica corrida'];
 
 type PickerModalProps = {
   visible: boolean;
@@ -21,7 +22,7 @@ type PickerModalProps = {
 
 function PickerModal({ visible, title, options, onSelect, onClose }: PickerModalProps) {
   return (
-    <Modal visible={visible} animationType="slide" transparent>
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={styles.modalOverlay}>
         <SafeAreaView style={styles.modalContainer}>
           <View style={styles.modalHeader}>
@@ -64,6 +65,7 @@ export default function NovoLoteScreen() {
   const [showVariedade, setShowVariedade] = useState(false);
   const [showProcesso, setShowProcesso] = useState(false);
   const [showBebida, setShowBebida] = useState(false);
+  const [showPeneira, setShowPeneira] = useState(false);
 
   async function handleSave() {
     if (!variedade || !processo || !sacas) {
@@ -172,7 +174,17 @@ export default function NovoLoteScreen() {
 
       {/* Peneira */}
       <Text style={styles.label}>Peneira (opcional)</Text>
-      <TextInput style={styles.input} value={peneira} onChangeText={setPeneira} placeholder="Ex: 40" keyboardType="numeric" placeholderTextColor={colors.textLight} />
+      <TouchableOpacity style={styles.select} onPress={() => setShowPeneira(true)}>
+        <Text style={peneira ? styles.selectText : styles.selectPlaceholder}>{peneira || 'Selecione a peneira'}</Text>
+        <Feather name="chevron-down" size={16} color={colors.textLight} />
+      </TouchableOpacity>
+      <PickerModal
+        visible={showPeneira}
+        title="Peneira"
+        options={PENEIRAS}
+        onSelect={setPeneira}
+        onClose={() => setShowPeneira(false)}
+      />
 
       {/* Cata */}
       <Text style={styles.label}>Cata - defeitos (opcional)</Text>

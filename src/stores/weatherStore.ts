@@ -14,6 +14,7 @@ interface WeatherState {
   fetchWeatherByCity: (municipio: string, estado?: string) => Promise<void>;
   fetchWeather: (userId?: string) => Promise<void>;
   fetchForecast: (municipio?: string, estado?: string) => Promise<void>;
+  captureCoords: (userId?: string) => Promise<void>;
 }
 
 async function getGpsCoords(): Promise<{ lat: number; lng: number } | null> {
@@ -79,11 +80,21 @@ export const useWeatherStore = create<WeatherState>((set, get) => ({
       set({ weather, cityName, loading: false });
 
       if (userId) {
-        userService.updateProfile(userId, { coordenadas: coords }).catch(() => {});
+        userService.updateProfile(userId, { lat: coords.lat, lng: coords.lng }).catch(() => {});
       }
     } catch {
       set({ error: 'Erro ao buscar clima', loading: false });
     }
+  },
+
+  // Capture the producer's GPS coordinates and persist them on their profile.
+  // Runs independently of the weather flow so we still collect coordinates even
+  // when the climate card is sourced from the registered farm city.
+  captureCoords: async (userId?: string) => {
+    if (!userId) return;
+    const coords = await getGpsCoords();
+    if (!coords) return;
+    userService.updateProfile(userId, { lat: coords.lat, lng: coords.lng }).catch(() => {});
   },
 
   // Fetch 7-day forecast (by city or GPS fallback)

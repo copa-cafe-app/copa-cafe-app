@@ -46,8 +46,11 @@ export const authService = {
     }
   },
 
-  // Verificar OTP e criar sessão
-  async verifyOtp(phone: string, code: string) {
+  // Verificar OTP e criar sessão.
+  // No cadastro, passe email+password reais: a Edge Function cria/atualiza a conta
+  // única com essas credenciais (confirmadas) e o login é feito com elas.
+  // No login por telefone (sem senha), a Edge Function devolve um token de sessão.
+  async verifyOtp(phone: string, code: string, email?: string, password?: string) {
     // 1. Verificar código no Twilio via Edge Function
     const res = await fetch(`${SUPABASE_URL}/functions/v1/verify-otp`, {
       method: 'POST',
@@ -55,18 +58,27 @@ export const authService = {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
       },
-      body: JSON.stringify({ phone, code }),
+      body: JSON.stringify({ phone, code, email, password }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Código inválido');
 
-    // 2. Login com email/password criados pela Edge Function
-    const { data: session, error } = await supabase.auth.signInWithPassword({
-      email: data.email,
-      password: data.password,
+    if (data.mode === 'password') {
+      // Cadastro: login com as credenciais reais que o usuário acabou de definir
+      const { data: session, error } = await supabase.auth.signInWithPassword({
+        email: data.email,
+        password: password!,
+      });
+      if (error) throw error;
+      return { ...session, is_new_user: data.is_new_user };
+    }
+
+    // Login por telefone: cria sessão a partir do token (sem senha)
+    const { data: session, error } = await supabase.auth.verifyOtp({
+      token_hash: data.token_hash,
+      type: 'magiclink',
     });
     if (error) throw error;
-
     return { ...session, is_new_user: data.is_new_user };
   },
 

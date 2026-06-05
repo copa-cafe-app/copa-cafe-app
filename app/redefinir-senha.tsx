@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { colors, spacing, fontSize, borderRadius } from '../src/constants/theme';
 import { authService } from '../src/services/auth.service';
+import { useAuthStore } from '../src/stores/authStore';
 
 export default function RedefinirSenhaScreen() {
   const [novaSenha, setNovaSenha] = useState('');
@@ -44,8 +45,8 @@ export default function RedefinirSenhaScreen() {
           </View>
         </View>
         <Text style={styles.title}>Senha redefinida!</Text>
-        <Text style={styles.subtitle}>Sua nova senha foi salva com sucesso.</Text>
-        <TouchableOpacity style={styles.button} onPress={() => router.replace('/(auth)/login')}>
+        <Text style={styles.subtitle}>Sua nova senha foi salva. Faça login com ela para continuar.</Text>
+        <TouchableOpacity style={styles.button} onPress={async () => { await useAuthStore.getState().signOut(); router.replace('/(auth)/login'); }}>
           <Text style={styles.buttonText}>Ir para o login</Text>
         </TouchableOpacity>
       </View>

@@ -17,7 +17,8 @@ export interface User {
 
   estado: string;
   municipio: string;
-  coordenadas?: { lat: number; lng: number };
+  lat?: number;
+  lng?: number;
 
   documento_verificado: boolean;
   verificado_em?: string;

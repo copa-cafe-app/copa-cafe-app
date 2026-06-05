@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Modal, Image, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Modal, Image, Alert, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { useState, useCallback } from 'react';
@@ -16,6 +16,33 @@ interface Despesa {
   safra: string | null;
   comprovante_url: string | null;
   vendor: string | null;
+  origem?: string | null;
+}
+
+function formatDateInput(text: string): string {
+  const digits = text.replace(/\D/g, '').slice(0, 8);
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+  return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+}
+
+function toISODate(text: string): string | null {
+  const match = text.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (!match) return null;
+  const [, dd, mm, yyyy] = match;
+  const d = new Date(parseInt(yyyy), parseInt(mm) - 1, parseInt(dd));
+  if (d.getDate() !== parseInt(dd) || d.getMonth() !== parseInt(mm) - 1) return null;
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function firstDayOfMonthBR(): string {
+  const now = new Date();
+  return `01/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
+}
+
+function todayBR(): string {
+  const now = new Date();
+  return `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
 }
 
 const categoriaLabels: Record<string, string> = {
@@ -43,6 +70,44 @@ export default function CustosScreen() {
   const [viewingImage, setViewingImage] = useState<string | null>(null);
   const [showExportModal, setShowExportModal] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [showPeriodModal, setShowPeriodModal] = useState(false);
+  const [periodStart, setPeriodStart] = useState(firstDayOfMonthBR());
+  const [periodEnd, setPeriodEnd] = useState(todayBR());
+
+  async function exportFiltered(filtered: Despesa[], label: string) {
+    if (!profile?.cpf_cnpj) {
+      Alert.alert('CPF necessário', 'Complete seu cadastro com CPF/CNPJ para gerar o relatório.');
+      return;
+    }
+    if (filtered.length === 0) {
+      Alert.alert('Sem despesas', 'Nenhuma despesa encontrada para o período selecionado.');
+      return;
+    }
+    setExporting(true);
+    try {
+      await exportDespesasPDF(profile, filtered, label);
+    } catch (err: any) {
+      Alert.alert('Erro', err.message || 'Não foi possível gerar o PDF');
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  async function handleExportPeriodo() {
+    const startISO = toISODate(periodStart);
+    const endISO = toISODate(periodEnd);
+    if (!startISO || !endISO) {
+      Alert.alert('Datas inválidas', 'Use o formato DD/MM/AAAA nas duas datas.');
+      return;
+    }
+    if (startISO > endISO) {
+      Alert.alert('Período inválido', 'A data inicial deve ser anterior à data final.');
+      return;
+    }
+    const filtered = despesas.filter((d) => d.data >= startISO && d.data <= endISO);
+    setShowPeriodModal(false);
+    await exportFiltered(filtered, `${periodStart} a ${periodEnd}`);
+  }
 
   async function handleExport(periodo: 'ano' | 'safra' | 'todos') {
     setShowExportModal(false);
@@ -144,7 +209,15 @@ export default function CustosScreen() {
                     <Feather name={(categoriaIcons[d.categoria] || 'dollar-sign') as any} size={18} color={colors.primary} />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.despesaDesc}>{d.descricao}</Text>
+                    <View style={styles.despesaDescRow}>
+                      <Text style={styles.despesaDesc} numberOfLines={1}>{d.descricao}</Text>
+                      {d.origem === 'DIARIO' && (
+                        <View style={styles.diarioBadge}>
+                          <Feather name="edit-3" size={10} color={colors.primary} />
+                          <Text style={styles.diarioBadgeText}>Diário</Text>
+                        </View>
+                      )}
+                    </View>
                     <Text style={styles.despesaCat}>
                       {categoriaLabels[d.categoria] || d.categoria} • {new Date(d.data + 'T00:00:00').toLocaleDateString('pt-BR')}
                     </Text>
@@ -200,11 +273,67 @@ export default function CustosScreen() {
               </View>
             </TouchableOpacity>
 
+            <TouchableOpacity
+              style={styles.exportOption}
+              onPress={() => { setShowExportModal(false); setShowPeriodModal(true); }}
+            >
+              <Feather name="sliders" size={20} color={colors.primary} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.exportOptionText}>Período personalizado</Text>
+                <Text style={styles.exportOptionHint}>Escolha data inicial e final</Text>
+              </View>
+            </TouchableOpacity>
+
             <TouchableOpacity style={styles.exportCancel} onPress={() => setShowExportModal(false)}>
               <Text style={styles.exportCancelText}>Cancelar</Text>
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
+      </Modal>
+
+      {/* Modal período personalizado */}
+      <Modal visible={showPeriodModal} transparent animationType="slide" onRequestClose={() => setShowPeriodModal(false)}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <View style={styles.exportOverlay}>
+          <View style={styles.exportContent}>
+            <Text style={styles.exportTitle}>Relatório por Período</Text>
+            <Text style={styles.exportSubtitle}>Escolha o intervalo de datas</Text>
+
+            <Text style={styles.periodLabel}>De</Text>
+            <TextInput
+              style={styles.periodInput}
+              value={periodStart}
+              onChangeText={(t) => setPeriodStart(formatDateInput(t))}
+              placeholder="DD/MM/AAAA"
+              keyboardType="number-pad"
+              maxLength={10}
+              placeholderTextColor={colors.textLight}
+            />
+
+            <Text style={styles.periodLabel}>Até</Text>
+            <TextInput
+              style={styles.periodInput}
+              value={periodEnd}
+              onChangeText={(t) => setPeriodEnd(formatDateInput(t))}
+              placeholder="DD/MM/AAAA"
+              keyboardType="number-pad"
+              maxLength={10}
+              placeholderTextColor={colors.textLight}
+            />
+
+            <TouchableOpacity style={styles.periodGenerate} onPress={handleExportPeriodo} disabled={exporting}>
+              {exporting ? (
+                <ActivityIndicator color={colors.white} />
+              ) : (
+                <Text style={styles.periodGenerateText}>Gerar PDF</Text>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.exportCancel} onPress={() => setShowPeriodModal(false)}>
+              <Text style={styles.exportCancelText}>Cancelar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Modal para visualizar comprovante */}
@@ -250,8 +379,15 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: fontSize.md, fontWeight: '600', color: colors.text, marginBottom: spacing.md },
   despesaCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: borderRadius.md, padding: spacing.md, marginBottom: spacing.sm, borderWidth: 1, borderColor: colors.border },
   despesaIcon: { width: 40, height: 40, borderRadius: borderRadius.md, backgroundColor: colors.surfaceVariant, alignItems: 'center', justifyContent: 'center', marginRight: spacing.md },
-  despesaDesc: { fontSize: fontSize.md, fontWeight: '500', color: colors.text },
+  despesaDescRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  despesaDesc: { fontSize: fontSize.md, fontWeight: '500', color: colors.text, flexShrink: 1 },
+  diarioBadge: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: colors.surfaceVariant, paddingHorizontal: 6, paddingVertical: 2, borderRadius: borderRadius.full },
+  diarioBadgeText: { fontSize: 10, fontWeight: '600', color: colors.primary },
   despesaCat: { fontSize: fontSize.xs, color: colors.textSecondary, marginTop: 2 },
+  periodLabel: { fontSize: fontSize.sm, fontWeight: '600', color: colors.text, marginBottom: spacing.xs, marginTop: spacing.sm },
+  periodInput: { backgroundColor: colors.surfaceVariant, borderRadius: borderRadius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.md, fontSize: fontSize.md, color: colors.text },
+  periodGenerate: { backgroundColor: colors.primary, height: 52, borderRadius: borderRadius.md, alignItems: 'center', justifyContent: 'center', marginTop: spacing.lg },
+  periodGenerateText: { color: colors.white, fontSize: fontSize.md, fontWeight: '700' },
   despesaValor: { fontSize: fontSize.md, fontWeight: '600', color: colors.error },
   comprovanteBtn: { width: 32, height: 32, borderRadius: borderRadius.sm, backgroundColor: colors.surfaceVariant, alignItems: 'center', justifyContent: 'center', marginLeft: spacing.sm },
   fab: { position: 'absolute', bottom: spacing.lg, right: spacing.lg, width: 56, height: 56, borderRadius: 28, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', elevation: 4 },

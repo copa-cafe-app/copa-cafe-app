@@ -41,7 +41,7 @@ export default function CadastroStep5() {
     try {
       // Check duplicates before creating
       const phoneE164 = '+' + (useCadastroStore.getState().countryDial || '55') + telefone.replace(/\D/g, '');
-      const duplicate = await userService.checkDuplicate(cpfCnpj, phoneE164);
+      const duplicate = await userService.checkDuplicate({ cpfCnpj, telefone: phoneE164 });
       if (duplicate) {
         setError(duplicate.message);
         setLoading(false);

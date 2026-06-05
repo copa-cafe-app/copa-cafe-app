@@ -15,11 +15,26 @@ serve(async (req) => {
   }
 
   try {
-    const { cpf_cnpj, telefone } = await req.json();
+    const { cpf_cnpj, telefone, email } = await req.json();
 
     const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
       auth: { autoRefreshToken: false, persistSession: false },
     });
+
+    if (email) {
+      const clean = email.trim();
+      const { data } = await supabaseAdmin
+        .from('users')
+        .select('id')
+        .ilike('email', clean)
+        .maybeSingle();
+      if (data) {
+        return new Response(
+          JSON.stringify({ duplicate: true, field: 'email', message: 'Este email já está cadastrado' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
 
     if (cpf_cnpj) {
       const clean = cpf_cnpj.replace(/\D/g, '');

@@ -66,7 +66,7 @@ function parseCSV(csv: string): string[][] {
 }
 
 export default function HomeScreen() {
-  const { weather, cityName, loading: weatherLoading, fetchWeather, fetchWeatherByCity } = useWeatherStore();
+  const { weather, cityName, loading: weatherLoading, fetchWeather, fetchWeatherByCity, captureCoords } = useWeatherStore();
   const { profile, user } = useAuthStore();
   const [safraStats, setSafraStats] = useState({ total: 0, vendidos: 0, receita: 0 });
   const [cotacoes, setCotacoes] = useState<{ kcCentsLb: number; kcVar: number; dolar: number; dolarVar: number } | null>(null);
@@ -192,6 +192,10 @@ export default function HomeScreen() {
   useEffect(() => {
     fetchCotacoes();
     fetchCopaCafePrice();
+
+    // Solicita a localização ao usar o app e salva as coordenadas no perfil
+    // (independe da fonte do clima, que segue a cidade da fazenda).
+    captureCoords(user?.id);
 
     if (user?.id) {
       userService.getPropriedades(user.id).then((props) => {
@@ -322,7 +326,7 @@ export default function HomeScreen() {
 
       {/* Clima */}
       <TouchableOpacity activeOpacity={0.7} onPress={() => router.push('/previsao')}>
-        <InfoCard title={cityName ? `Clima — ${cityName}` : selectedProp?.municipio ? `Clima — ${selectedProp.municipio}` : 'Clima Hoje'} icon="cloud">
+        <InfoCard title={selectedProp?.municipio ? `Clima — ${selectedProp.municipio}` : cityName ? `Clima — ${cityName}` : 'Clima Hoje'} icon="cloud">
           {weatherLoading ? (
             <View style={styles.climaLoading}>
               <ActivityIndicator color={colors.primary} />
@@ -372,8 +376,8 @@ export default function HomeScreen() {
       <View style={styles.quickActions}>
         <QuickActionButton icon="plus-circle" label="Novo Lote" onPress={() => router.push('/novo-lote')} />
         <QuickActionButton icon="edit-3" label="Atividade" onPress={() => router.push('/diario')} />
-        <QuickActionButton icon="camera" label="Saúde Planta" onPress={() => router.push('/analise-planta')} />
-        <QuickActionButton icon="shopping-bag" label="Insumos" onPress={() => router.push('/marketplace')} />
+        <QuickActionButton icon="camera" label="Saúde da Planta" onPress={() => router.push('/analise-planta')} />
+        {/* Marketplace escondido até ter pagamento real — reativar com QuickActionButton "Insumos" → /marketplace */}
       </View>
     </ScrollView>
   );

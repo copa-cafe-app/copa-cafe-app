@@ -40,8 +40,8 @@ export default function PerfilScreen() {
         <Text style={styles.name}>{profile?.nome || 'Produtor'}</Text>
         <Text style={styles.region}>{profile?.municipio && profile?.estado ? `${profile.municipio} • ${profile.estado}` : 'Localização não definida'}</Text>
         <TouchableOpacity style={styles.editButton} onPress={() => router.push('/perfil-dados')}>
-          <Feather name="edit-2" size={14} color={colors.primary} />
-          <Text style={styles.editText}>Editar perfil</Text>
+          <Feather name="user" size={14} color={colors.primary} />
+          <Text style={styles.editText}>Meus dados</Text>
         </TouchableOpacity>
       </View>
 
@@ -55,15 +55,15 @@ export default function PerfilScreen() {
 
       <View style={styles.section}>
         <Text style={styles.sectionLabel}>Configurações</Text>
-        <MenuItem icon="bell" title="Notificações" subtitle="Push, email, SMS" onPress={() => router.push('/perfil-ajuda')} />
+        {/* Notificações (push) escondido até ativar push no build — reativar: MenuItem bell → /notificacoes-config */}
         <MenuItem icon="shield" title="Privacidade (LGPD)" subtitle="Exportar dados, excluir conta" onPress={() => router.push('/perfil-privacidade')} />
-        <MenuItem icon="lock" title="Segurança" subtitle="Senha, biometria" onPress={() => router.push('/perfil-seguranca')} />
+        <MenuItem icon="lock" title="Segurança" subtitle="Alterar senha" onPress={() => router.push('/perfil-seguranca')} />
       </View>
 
       <View style={styles.section}>
         <Text style={styles.sectionLabel}>Suporte</Text>
         <MenuItem icon="help-circle" title="Ajuda" onPress={() => router.push('/perfil-ajuda')} />
-        <MenuItem icon="message-circle" title="Fale Conosco" onPress={() => router.push('/perfil-ajuda')} />
+        <MenuItem icon="message-circle" title="Fale Conosco" onPress={() => router.push('/fale-conosco')} />
         <MenuItem icon="info" title="Sobre o Copa Café" subtitle="v1.0.0" onPress={() => router.push('/perfil-sobre')} />
       </View>
 

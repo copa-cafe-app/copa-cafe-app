@@ -63,19 +63,6 @@ export default function NotificacoesScreen() {
           }
         }
 
-        // 2. Checar clima (alerta se chuva > 70%)
-        // Weather info from the store would be nice, but let's keep it simple
-        notifs.push({
-          id: 'clima-dica',
-          tipo: 'clima',
-          titulo: 'Dica de manejo',
-          mensagem: 'Verifique a previsão do tempo antes de aplicar defensivos. Chuva pode comprometer a eficácia.',
-          lida: false,
-          data: new Date(now.getTime() - 3600000).toISOString(),
-          icon: 'cloud',
-          iconColor: '#1565C0',
-        });
-
         // 3. Lembrete do diário
         const { data: ultimaAtividade } = await supabase
           .from('atividades_campo')
@@ -132,18 +119,6 @@ export default function NotificacoesScreen() {
             iconColor: colors.primary,
           });
         }
-
-        // 5. Marketplace - novos produtos
-        notifs.push({
-          id: 'marketplace-novo',
-          tipo: 'sistema',
-          titulo: 'Marketplace de Insumos',
-          mensagem: 'Novos produtos disponíveis! Confira fertilizantes, defensivos e mudas para sua lavoura.',
-          lida: true,
-          data: new Date(now.getTime() - 172800000).toISOString(),
-          icon: 'shopping-bag',
-          iconColor: '#7B1FA2',
-        });
 
       } catch {}
     }

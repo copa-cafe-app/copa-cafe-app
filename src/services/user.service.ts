@@ -3,14 +3,14 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../constants/config';
 import type { User, Propriedade } from '../types/user';
 
 export const userService = {
-  async checkDuplicate(cpfCnpj: string, telefone: string): Promise<{ field: string; message: string } | null> {
+  async checkDuplicate(params: { cpfCnpj?: string; telefone?: string; email?: string }): Promise<{ field: string; message: string } | null> {
     const res = await fetch(`${SUPABASE_URL}/functions/v1/check-duplicate`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
       },
-      body: JSON.stringify({ cpf_cnpj: cpfCnpj, telefone }),
+      body: JSON.stringify({ cpf_cnpj: params.cpfCnpj, telefone: params.telefone, email: params.email }),
     });
     const data = await res.json();
     if (data.duplicate) return { field: data.field, message: data.message };

@@ -98,6 +98,8 @@ export default function RootLayout() {
           headerTintColor: colors.primary,
           headerTitleStyle: { fontWeight: '600' },
           contentStyle: { backgroundColor: colors.background },
+          // Evita o back button mostrar o nome cru da rota anterior (ex.: "(auth)/login")
+          headerBackTitle: 'Voltar',
         }}
       >
         <Stack.Screen name="onboarding" options={{ headerShown: false }} />
@@ -126,6 +128,8 @@ export default function RootLayout() {
         <Stack.Screen name="simulador-venda" options={{ headerShown: false }} />
         <Stack.Screen name="alertas-preco" options={{ headerShown: false }} />
         <Stack.Screen name="notificacoes" options={{ headerShown: false }} />
+        <Stack.Screen name="notificacoes-config" options={{ headerShown: false }} />
+        <Stack.Screen name="fale-conosco" options={{ headerShown: false }} />
         <Stack.Screen name="lote-detalhe" options={{ headerShown: false }} />
         <Stack.Screen name="marketplace" options={{ headerShown: false }} />
         <Stack.Screen name="produto-detalhe" options={{ headerShown: false }} />

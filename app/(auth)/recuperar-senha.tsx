@@ -1,10 +1,11 @@
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView, Modal, FlatList } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { colors, spacing, fontSize, borderRadius } from '../../src/constants/theme';
 import { useAuthStore } from '../../src/stores/authStore';
 import { useState } from 'react';
 import { translateAuthError } from '../../src/utils/authErrors';
+import { COUNTRY_CODES, DEFAULT_COUNTRY, type CountryCode } from '../../src/constants/countryCodes';
 
 type Mode = 'email' | 'sms';
 
@@ -12,12 +13,18 @@ export default function RecuperarSenhaScreen() {
   const [mode, setMode] = useState<Mode>('email');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+  const [country, setCountry] = useState<CountryCode>(DEFAULT_COUNTRY);
+  const [showCountryPicker, setShowCountryPicker] = useState(false);
   const [code, setCode] = useState('');
   const [sent, setSent] = useState(false);
   const [codeSent, setCodeSent] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { resetPassword, sendOtp, verifyOtp } = useAuthStore();
+
+  function getE164Phone() {
+    return '+' + country.dial + phone.replace(/\D/g, '');
+  }
 
   async function handleSendEmail() {
     if (!email.includes('@')) {
@@ -37,14 +44,13 @@ export default function RecuperarSenhaScreen() {
 
   async function handleSendSms() {
     const cleaned = phone.replace(/\D/g, '');
-    if (cleaned.length < 10) {
+    if (cleaned.length < 8) {
       setError('Telefone inválido');
       return;
     }
-    const formatted = cleaned.startsWith('55') ? `+${cleaned}` : `+55${cleaned}`;
     setLoading(true);
     try {
-      await sendOtp(formatted, 'sms');
+      await sendOtp(getE164Phone(), 'sms');
       setCodeSent(true);
     } catch (err: any) {
       setError(translateAuthError(err.message));
@@ -58,11 +64,9 @@ export default function RecuperarSenhaScreen() {
       setError('Código inválido');
       return;
     }
-    const cleaned = phone.replace(/\D/g, '');
-    const formatted = cleaned.startsWith('55') ? `+${cleaned}` : `+55${cleaned}`;
     setLoading(true);
     try {
-      await verifyOtp(formatted, code);
+      await verifyOtp(getE164Phone(), code);
       // Logado via OTP — redirecionar pra redefinir senha
       router.replace('/redefinir-senha');
     } catch (err: any) {
@@ -107,7 +111,7 @@ export default function RecuperarSenhaScreen() {
         <Text style={styles.title}>Código enviado!</Text>
         <Text style={styles.subtitle}>
           Digite o código que enviamos para{'\n'}
-          <Text style={{ fontWeight: '600', color: colors.text }}>{phone}</Text>
+          <Text style={{ fontWeight: '600', color: colors.text }}>+{country.dial} {phone}</Text>
         </Text>
 
         <View style={styles.inputGroup}>
@@ -195,19 +199,47 @@ export default function RecuperarSenhaScreen() {
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Telefone</Text>
           <View style={[styles.inputWrapper, error && styles.inputError]}>
-            <Feather name="smartphone" size={18} color={colors.textLight} />
+            <TouchableOpacity style={styles.countrySelector} onPress={() => setShowCountryPicker(true)}>
+              <Text style={styles.countryFlag}>{country.flag}</Text>
+              <Text style={styles.countryDial}>+{country.dial}</Text>
+              <Feather name="chevron-down" size={14} color={colors.textLight} />
+            </TouchableOpacity>
+            <View style={styles.dividerLine} />
             <TextInput
               style={styles.input}
-              placeholder="(31) 99999-9999"
+              placeholder="Seu número"
               keyboardType="phone-pad"
               value={phone}
-              onChangeText={(v) => { setPhone(v); setError(''); }}
+              onChangeText={(v) => { setPhone(v.replace(/[^0-9]/g, '')); setError(''); }}
               placeholderTextColor={colors.textLight}
+              maxLength={15}
             />
           </View>
           {error ? <Text style={styles.errorText}>{error}</Text> : null}
         </View>
       )}
+
+      <Modal visible={showCountryPicker} transparent animationType="slide">
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowCountryPicker(false)}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Selecionar país</Text>
+            <FlatList
+              data={COUNTRY_CODES}
+              keyExtractor={(item) => item.code}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={[styles.countryItem, item.code === country.code && styles.countryItemActive]}
+                  onPress={() => { setCountry(item); setShowCountryPicker(false); }}
+                >
+                  <Text style={styles.countryItemFlag}>{item.flag}</Text>
+                  <Text style={styles.countryItemName}>{item.name}</Text>
+                  <Text style={styles.countryItemDial}>+{item.dial}</Text>
+                </TouchableOpacity>
+              )}
+            />
+          </View>
+        </TouchableOpacity>
+      </Modal>
 
       <TouchableOpacity
         style={[styles.button, loading && { opacity: 0.7 }]}
@@ -263,6 +295,18 @@ const styles = StyleSheet.create({
   inputError: { borderColor: colors.error },
   input: { flex: 1, fontSize: fontSize.md, color: colors.text },
   errorText: { fontSize: fontSize.xs, color: colors.error, marginTop: 4 },
+  countrySelector: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  countryFlag: { fontSize: 20 },
+  countryDial: { fontSize: fontSize.md, fontWeight: '600', color: colors.text, marginRight: 4 },
+  dividerLine: { width: 1, height: 24, backgroundColor: colors.border },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modalContent: { backgroundColor: colors.surface, borderTopLeftRadius: borderRadius.lg, borderTopRightRadius: borderRadius.lg, padding: spacing.lg, maxHeight: '60%' },
+  modalTitle: { fontSize: fontSize.lg, fontWeight: '700', color: colors.text, marginBottom: spacing.md, textAlign: 'center' },
+  countryItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.md, paddingHorizontal: spacing.sm, borderRadius: borderRadius.sm },
+  countryItemActive: { backgroundColor: colors.surfaceVariant },
+  countryItemFlag: { fontSize: 22, marginRight: spacing.md },
+  countryItemName: { flex: 1, fontSize: fontSize.md, color: colors.text },
+  countryItemDial: { fontSize: fontSize.md, color: colors.textSecondary, fontWeight: '600' },
   button: {
     backgroundColor: colors.primary, height: 52, borderRadius: borderRadius.md,
     alignItems: 'center', justifyContent: 'center',

@@ -1,13 +1,16 @@
-import { View, Text, StyleSheet, TouchableOpacity, Modal, TextInput, ScrollView, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Modal, TextInput, ScrollView, Alert, KeyboardAvoidingView, Platform, Image, ActivityIndicator } from 'react-native';
 import { Calendar, type DateData } from 'react-native-calendars';
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import * as ImagePicker from 'expo-image-picker';
 import { colors, spacing, fontSize, borderRadius } from '../src/constants/theme';
 import { useAuthStore } from '../src/stores/authStore';
 import { useWeatherStore } from '../src/stores/weatherStore';
 import { atividadeService } from '../src/services/atividade.service';
 import { userService } from '../src/services/user.service';
+import { uploadComprovante } from '../src/utils/uploadComprovante';
+import { exportAtividadesPDF } from '../src/utils/exportAtividades';
 import type { Propriedade } from '../src/types/user';
 import {
   ATIVIDADE_LABELS,
@@ -42,8 +45,36 @@ function getConfidence(daysAhead: number): { label: string; color: string } {
   return { label: 'Confiança baixa', color: colors.textLight };
 }
 
+// Máscara DD/MM/AAAA enquanto digita
+function formatDateInput(text: string): string {
+  const digits = text.replace(/\D/g, '').slice(0, 8);
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+  return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+}
+
+// DD/MM/AAAA -> YYYY-MM-DD (null se inválida)
+function toISODate(text: string): string | null {
+  const match = text.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (!match) return null;
+  const [, dd, mm, yyyy] = match;
+  const d = new Date(parseInt(yyyy), parseInt(mm) - 1, parseInt(dd));
+  if (d.getDate() !== parseInt(dd) || d.getMonth() !== parseInt(mm) - 1) return null;
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function firstDayOfMonthBR(): string {
+  const now = new Date();
+  return `01/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
+}
+
+function todayBR(): string {
+  const now = new Date();
+  return `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
+}
+
 export default function DiarioScreen() {
-  const { user } = useAuthStore();
+  const { user, profile } = useAuthStore();
   const { forecast, fetchForecast } = useWeatherStore();
   const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [atividades, setAtividades] = useState<Atividade[]>([]);
@@ -72,9 +103,16 @@ export default function DiarioScreen() {
   const [titulo, setTitulo] = useState('');
   const [descricao, setDescricao] = useState('');
   const [custo, setCusto] = useState('');
+  const [comprovanteUri, setComprovanteUri] = useState<string | null>(null);
   const [showTipoPicker, setShowTipoPicker] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+
+  // Relatório por período (FB7)
+  const [showReport, setShowReport] = useState(false);
+  const [reportStart, setReportStart] = useState(firstDayOfMonthBR());
+  const [reportEnd, setReportEnd] = useState(todayBR());
+  const [generating, setGenerating] = useState(false);
 
   const loadAtividades = useCallback(async () => {
     if (!user?.id) return;
@@ -138,6 +176,7 @@ export default function DiarioScreen() {
     setTitulo(atividade.titulo);
     setDescricao(atividade.descricao || '');
     setCusto(atividade.custo ? String(atividade.custo) : '');
+    setComprovanteUri(null);
     setShowModal(true);
   }
 
@@ -147,7 +186,61 @@ export default function DiarioScreen() {
     setTitulo('');
     setDescricao('');
     setCusto('');
+    setComprovanteUri(null);
     setShowModal(true);
+  }
+
+  async function pickComprovante(fromCamera: boolean) {
+    const perm = fromCamera
+      ? await ImagePicker.requestCameraPermissionsAsync()
+      : await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert('Permissão necessária', fromCamera ? 'Precisamos de acesso à câmera.' : 'Precisamos de acesso à galeria.');
+      return;
+    }
+    const opts: ImagePicker.ImagePickerOptions = { quality: 0.6, allowsEditing: true, mediaTypes: ['images'] };
+    const result = fromCamera
+      ? await ImagePicker.launchCameraAsync(opts)
+      : await ImagePicker.launchImageLibraryAsync(opts);
+    if (!result.canceled && result.assets[0]) {
+      setComprovanteUri(result.assets[0].uri);
+    }
+  }
+
+  function askComprovanteSource() {
+    Alert.alert('Anexar comprovante', undefined, [
+      { text: 'Tirar foto', onPress: () => pickComprovante(true) },
+      { text: 'Escolher da galeria', onPress: () => pickComprovante(false) },
+      { text: 'Cancelar', style: 'cancel' },
+    ]);
+  }
+
+  async function handleGenerateReport() {
+    if (!user?.id) return;
+    const startISO = toISODate(reportStart);
+    const endISO = toISODate(reportEnd);
+    if (!startISO || !endISO) {
+      Alert.alert('Datas inválidas', 'Use o formato DD/MM/AAAA nas duas datas.');
+      return;
+    }
+    if (startISO > endISO) {
+      Alert.alert('Período inválido', 'A data inicial deve ser anterior à data final.');
+      return;
+    }
+    setGenerating(true);
+    try {
+      const lista = await atividadeService.listByRange(user.id, startISO, endISO);
+      if (lista.length === 0) {
+        Alert.alert('Sem atividades', 'Nenhuma atividade registrada nesse período.');
+        return;
+      }
+      await exportAtividadesPDF(profile, lista, `${reportStart} a ${reportEnd}`);
+      setShowReport(false);
+    } catch (err: any) {
+      Alert.alert('Erro', err.message || 'Não foi possível gerar o relatório');
+    } finally {
+      setGenerating(false);
+    }
   }
 
   async function handleSave() {
@@ -155,13 +248,20 @@ export default function DiarioScreen() {
     if (!user?.id) return;
     setSaving(true);
     try {
+      const custoNum = custo ? parseFloat(custo.replace(',', '.')) : 0;
+      // O comprovante fica vinculado à despesa, que só existe quando há custo.
+      let comprovanteUrl: string | null | undefined = undefined;
+      if (comprovanteUri && custoNum > 0) {
+        comprovanteUrl = await uploadComprovante(comprovanteUri, user.id);
+      }
+
       if (editingId) {
         await atividadeService.update(editingId, {
           tipo,
           titulo: titulo.trim(),
           descricao: descricao.trim() || undefined,
-          custo: custo ? parseFloat(custo) : null,
-        });
+          custo: custoNum > 0 ? custoNum : null,
+        }, comprovanteUrl);
       } else {
         await atividadeService.create({
           produtor_id: user.id,
@@ -169,18 +269,19 @@ export default function DiarioScreen() {
           titulo: titulo.trim(),
           descricao: descricao.trim() || undefined,
           data: selectedDate,
-          custo: custo ? parseFloat(custo) : undefined,
-        });
+          custo: custoNum > 0 ? custoNum : undefined,
+        }, comprovanteUrl ?? null);
       }
       setShowModal(false);
       setEditingId(null);
       setTitulo('');
       setDescricao('');
       setCusto('');
+      setComprovanteUri(null);
       setTipo('ADUBACAO');
       await loadAtividades();
-    } catch {
-      Alert.alert('Erro', 'Não foi possível salvar a atividade');
+    } catch (err: any) {
+      Alert.alert('Erro', err.message || 'Não foi possível salvar a atividade');
     } finally {
       setSaving(false);
     }
@@ -216,7 +317,9 @@ export default function DiarioScreen() {
           <Feather name="arrow-left" size={22} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Diário de Campo</Text>
-        <View style={{ width: 40 }} />
+        <TouchableOpacity onPress={() => setShowReport(true)} style={styles.backButton}>
+          <Feather name="file-text" size={20} color={colors.primary} />
+        </TouchableOpacity>
       </View>
 
       <ScrollView style={{ flex: 1 }}>
@@ -350,7 +453,7 @@ export default function DiarioScreen() {
       </TouchableOpacity>
 
       {/* Modal Nova Atividade */}
-      <Modal visible={showModal} transparent animationType="slide">
+      <Modal visible={showModal} transparent animationType="slide" onRequestClose={() => setShowModal(false)}>
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View style={styles.modalOverlay}>
           <ScrollView style={styles.modalContent} keyboardShouldPersistTaps="handled">
@@ -415,6 +518,34 @@ export default function DiarioScreen() {
                 placeholderTextColor={colors.textLight}
               />
             </View>
+            {custo ? (
+              <Text style={styles.custoHint}>Este custo entra automaticamente na aba Custos de Produção.</Text>
+            ) : null}
+
+            {/* Comprovante (vinculado ao custo) */}
+            {custo ? (
+              <>
+                <Text style={styles.fieldLabel}>Comprovante (opcional)</Text>
+                {comprovanteUri ? (
+                  <View style={styles.compRow}>
+                    <Image source={{ uri: comprovanteUri }} style={styles.compThumb} />
+                    <TouchableOpacity style={styles.compAction} onPress={askComprovanteSource}>
+                      <Feather name="refresh-cw" size={14} color={colors.primary} />
+                      <Text style={styles.compActionText}>Trocar</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.compAction} onPress={() => setComprovanteUri(null)}>
+                      <Feather name="trash-2" size={14} color={colors.error} />
+                      <Text style={[styles.compActionText, { color: colors.error }]}>Remover</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <TouchableOpacity style={styles.compAttach} onPress={askComprovanteSource}>
+                    <Feather name="paperclip" size={16} color={colors.primary} />
+                    <Text style={styles.compAttachText}>Anexar comprovante</Text>
+                  </TouchableOpacity>
+                )}
+              </>
+            ) : null}
 
             {/* Botões */}
             <View style={styles.modalButtons}>
@@ -430,6 +561,57 @@ export default function DiarioScreen() {
               </TouchableOpacity>
             </View>
           </ScrollView>
+        </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Modal Relatório por período (FB7) */}
+      <Modal visible={showReport} transparent animationType="slide" onRequestClose={() => setShowReport(false)}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.reportContent}>
+            <Text style={styles.modalTitle}>Relatório por Período</Text>
+            <Text style={styles.modalDate}>Escolha o intervalo (pode ser mais de um mês)</Text>
+
+            <Text style={styles.fieldLabel}>De</Text>
+            <TextInput
+              style={styles.textInput}
+              value={reportStart}
+              onChangeText={(t) => setReportStart(formatDateInput(t))}
+              placeholder="DD/MM/AAAA"
+              keyboardType="number-pad"
+              maxLength={10}
+              placeholderTextColor={colors.textLight}
+            />
+
+            <Text style={styles.fieldLabel}>Até</Text>
+            <TextInput
+              style={styles.textInput}
+              value={reportEnd}
+              onChangeText={(t) => setReportEnd(formatDateInput(t))}
+              placeholder="DD/MM/AAAA"
+              keyboardType="number-pad"
+              maxLength={10}
+              placeholderTextColor={colors.textLight}
+            />
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity style={styles.cancelButton} onPress={() => setShowReport(false)}>
+                <Text style={styles.cancelText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.saveButton, generating && { opacity: 0.5 }]}
+                onPress={handleGenerateReport}
+                disabled={generating}
+              >
+                {generating ? (
+                  <ActivityIndicator color={colors.white} />
+                ) : (
+                  <Text style={styles.saveText}>Gerar PDF</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
         </KeyboardAvoidingView>
       </Modal>
@@ -575,6 +757,20 @@ const styles = StyleSheet.create({
   },
   custoWrapper: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   custoPrefix: { fontSize: fontSize.md, fontWeight: '600', color: colors.text },
+  custoHint: { fontSize: fontSize.xs, color: colors.textSecondary, marginTop: spacing.xs },
+  compAttach: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderWidth: 1, borderColor: colors.border, borderStyle: 'dashed', borderRadius: borderRadius.md, padding: spacing.md, justifyContent: 'center' },
+  compAttachText: { fontSize: fontSize.sm, color: colors.primary, fontWeight: '600' },
+  compRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  compThumb: { width: 56, height: 56, borderRadius: borderRadius.sm, backgroundColor: colors.surfaceVariant },
+  compAction: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  compActionText: { fontSize: fontSize.sm, color: colors.primary, fontWeight: '500' },
+  reportContent: {
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: borderRadius.lg,
+    borderTopRightRadius: borderRadius.lg,
+    padding: spacing.lg,
+    paddingBottom: spacing.xxl,
+  },
   modalButtons: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.lg },
   cancelButton: {
     flex: 1,

@@ -1,24 +1,74 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { useState } from 'react';
 import { colors, spacing, fontSize, borderRadius } from '../src/constants/theme';
 import { useAuthStore } from '../src/stores/authStore';
+import { supabase } from '../src/services/supabase';
+import { SUPABASE_URL } from '../src/constants/config';
 
 export default function PrivacidadeScreen() {
-  const { user } = useAuthStore();
+  const { signOut } = useAuthStore();
+  const [exporting, setExporting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  async function callFn(name: string) {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) throw new Error('Sessão expirada. Faça login novamente.');
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/${name}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Falha na operação');
+    return data;
+  }
 
   function handleExportData() {
-    Alert.alert('Exportar Dados', 'Seus dados serão enviados para o email cadastrado em até 48 horas.\n\nDeseja continuar?', [
+    Alert.alert('Exportar Dados', 'Vamos reunir seus dados e enviar para o email cadastrado na sua conta.\n\nDeseja continuar?', [
       { text: 'Cancelar', style: 'cancel' },
-      { text: 'Solicitar', onPress: () => Alert.alert('Solicitação enviada', 'Você receberá seus dados por email.') },
+      {
+        text: 'Solicitar',
+        onPress: async () => {
+          setExporting(true);
+          try {
+            await callFn('export-data');
+            Alert.alert('Pronto!', 'Enviamos uma cópia dos seus dados para o seu email. Confira a caixa de entrada (e o spam).');
+          } catch (err: any) {
+            Alert.alert('Não foi possível exportar', err.message || 'Tente novamente mais tarde.');
+          } finally {
+            setExporting(false);
+          }
+        },
+      },
     ]);
   }
 
   function handleDeleteAccount() {
-    Alert.alert('Excluir Conta', 'Esta ação é irreversível. Todos os seus dados serão permanentemente excluídos.\n\nTem certeza?', [
-      { text: 'Cancelar', style: 'cancel' },
-      { text: 'Excluir minha conta', style: 'destructive', onPress: () => Alert.alert('Atenção', 'Entre em contato com o suporte para confirmar a exclusão.') },
-    ]);
+    Alert.alert(
+      'Excluir Conta',
+      'Esta ação é irreversível. Sua conta e TODOS os seus dados (fazenda, lotes, diário, custos) serão permanentemente excluídos.\n\nTem certeza?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Excluir minha conta',
+          style: 'destructive',
+          onPress: async () => {
+            setDeleting(true);
+            try {
+              await callFn('delete-account');
+              await signOut();
+              Alert.alert('Conta excluída', 'Sua conta e seus dados foram removidos.');
+              router.replace('/(auth)/login');
+            } catch (err: any) {
+              Alert.alert('Não foi possível excluir', err.message || 'Tente novamente mais tarde.');
+            } finally {
+              setDeleting(false);
+            }
+          },
+        },
+      ]
+    );
   }
 
   return (
@@ -43,22 +93,22 @@ export default function PrivacidadeScreen() {
 
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Ações</Text>
-        <TouchableOpacity style={styles.actionBtn} onPress={handleExportData}>
+        <TouchableOpacity style={styles.actionBtn} onPress={handleExportData} disabled={exporting || deleting}>
           <Feather name="download" size={20} color={colors.primary} />
           <View style={{ flex: 1 }}>
             <Text style={styles.actionTitle}>Exportar meus dados</Text>
             <Text style={styles.actionSub}>Receba uma cópia dos seus dados por email</Text>
           </View>
-          <Feather name="chevron-right" size={18} color={colors.textLight} />
+          {exporting ? <ActivityIndicator color={colors.primary} /> : <Feather name="chevron-right" size={18} color={colors.textLight} />}
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.actionBtn} onPress={handleDeleteAccount}>
+        <TouchableOpacity style={styles.actionBtn} onPress={handleDeleteAccount} disabled={exporting || deleting}>
           <Feather name="trash-2" size={20} color={colors.error} />
           <View style={{ flex: 1 }}>
             <Text style={[styles.actionTitle, { color: colors.error }]}>Excluir minha conta</Text>
             <Text style={styles.actionSub}>Remover todos os dados permanentemente</Text>
           </View>
-          <Feather name="chevron-right" size={18} color={colors.textLight} />
+          {deleting ? <ActivityIndicator color={colors.error} /> : <Feather name="chevron-right" size={18} color={colors.textLight} />}
         </TouchableOpacity>
       </View>
     </ScrollView>

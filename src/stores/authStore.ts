@@ -16,7 +16,7 @@ interface AuthState {
   signUp: (email: string, password: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
   sendOtp: (phone: string, channel?: OtpChannel) => Promise<void>;
-  verifyOtp: (phone: string, code: string) => Promise<{ is_new_user?: boolean }>;
+  verifyOtp: (phone: string, code: string, email?: string, password?: string) => Promise<{ is_new_user?: boolean }>;
   // Fallback SMS nativo do Supabase
   sendSmsOtp: (phone: string) => Promise<void>;
   verifySmsOtp: (phone: string, token: string) => Promise<void>;
@@ -110,10 +110,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
-  verifyOtp: async (phone, code) => {
+  verifyOtp: async (phone, code, email, password) => {
     set({ loading: true, error: null });
     try {
-      const data = await authService.verifyOtp(phone, code);
+      const data = await authService.verifyOtp(phone, code, email, password);
       set({ user: data.user, session: data.session, loading: false });
       if (data.user) {
         get().loadProfile();

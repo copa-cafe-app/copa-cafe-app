@@ -5,6 +5,7 @@ import { colors, spacing, fontSize, borderRadius } from '../../src/constants/the
 import { useAuthStore } from '../../src/stores/authStore';
 import { useState, useRef } from 'react';
 import { translateAuthError } from '../../src/utils/authErrors';
+import { isDeviceTrusted, trustDevice } from '../../src/utils/deviceTrust';
 
 type Step = 'credentials' | 'otp';
 
@@ -53,18 +54,21 @@ export default function LoginScreen() {
     setError('');
     try {
       await signIn(email, password);
-      // Buscar telefone do perfil pra enviar OTP (2FA)
       const { profile, user } = useAuthStore.getState();
-      if (profile?.telefone && !profile?.skip_2fa) {
+      if (!profile) {
+        // Sem perfil = novo usuário, auth guard redireciona
+        router.replace('/(auth)/cadastro/perfil');
+        return;
+      }
+      // 2FA só em dispositivo novo: pula o SMS se a conta tem skip_2fa OU se este
+      // aparelho já passou pelo 2FA antes (dispositivo confiável).
+      const trusted = user?.id ? await isDeviceTrusted(user.id) : false;
+      if (profile.skip_2fa || trusted || !profile.telefone) {
+        router.replace('/(tabs)');
+      } else {
         setUserPhone(profile.telefone);
         await useAuthStore.getState().sendOtp(profile.telefone, 'sms');
         setStep('otp');
-      } else if (profile?.skip_2fa) {
-        // Conta com 2FA desativado (review/suporte): entra direto
-        router.replace('/(tabs)');
-      } else {
-        // Sem perfil = novo usuário, auth guard redireciona
-        router.replace('/(auth)/cadastro/perfil');
       }
     } catch (err: any) {
       setError(translateAuthError(err.message));
@@ -110,6 +114,9 @@ export default function LoginScreen() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Código inválido');
+      // Passou pelo 2FA: marca este aparelho como confiável (não pede SMS de novo aqui)
+      const { user } = useAuthStore.getState();
+      if (user?.id) await trustDevice(user.id);
       router.replace('/(tabs)');
     } catch (err: any) {
       setError(translateAuthError(err.message));
@@ -246,21 +253,15 @@ export default function LoginScreen() {
           {/* Divider */}
           <View style={styles.divider}>
             <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>ou continue com</Text>
+            <Text style={styles.dividerText}>ou</Text>
             <View style={styles.dividerLine} />
           </View>
 
-          {/* Social */}
-          <View style={styles.socialRow}>
-            <TouchableOpacity style={styles.socialButton} onPress={() => router.push('/(auth)/sms-login')}>
-              <Feather name="smartphone" size={20} color={colors.text} />
-              <Text style={styles.socialText}>SMS</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.socialButton} onPress={() => handleOAuth('google')} disabled={loading}>
-              <Text style={[styles.socialText, { fontSize: 18 }]}>G</Text>
-              <Text style={styles.socialText}>Google</Text>
-            </TouchableOpacity>
-          </View>
+          {/* Login alternativo — Google escondido até OAuth ser configurado */}
+          <TouchableOpacity style={[styles.socialButton, { width: '100%' }]} onPress={() => router.push('/(auth)/sms-login')}>
+            <Feather name="smartphone" size={20} color={colors.text} />
+            <Text style={styles.socialText}>Entrar com código por SMS</Text>
+          </TouchableOpacity>
 
           <View style={styles.signupRow}>
             <Text style={styles.signupText}>Não tem conta? </Text>

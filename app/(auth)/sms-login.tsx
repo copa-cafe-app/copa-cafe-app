@@ -15,7 +15,8 @@ export default function OtpLoginScreen() {
   const [telefone, setTelefone] = useState('');
   const [country, setCountry] = useState<CountryCode>(DEFAULT_COUNTRY);
   const [showCountryPicker, setShowCountryPicker] = useState(false);
-  const [channel, setChannel] = useState<OtpChannel>('sms');
+  // WhatsApp temporariamente desativado (aguardando aprovação Meta/Twilio) — SMS only
+  const channel: OtpChannel = 'sms';
   const [code, setCode] = useState(['', '', '', '', '', '']);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -109,19 +110,18 @@ export default function OtpLoginScreen() {
 
   // ====== TELA OTP ======
   if (step === 'otp') {
-    const channelLabel = channel === 'whatsapp' ? 'WhatsApp' : 'SMS';
     return (
       <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: spacing.lg }} keyboardShouldPersistTaps="handled">
         <View style={styles.iconContainer}>
-          <View style={[styles.iconCircle, channel === 'whatsapp' && styles.iconCircleWhatsApp]}>
-            <Feather name={channel === 'whatsapp' ? 'message-circle' : 'smartphone'} size={32} color={channel === 'whatsapp' ? '#25D366' : colors.primary} />
+          <View style={styles.iconCircle}>
+            <Feather name="smartphone" size={32} color={colors.primary} />
           </View>
         </View>
 
         <Text style={styles.title}>Código de verificação</Text>
         <Text style={styles.subtitle}>
-          Enviamos um código via {channelLabel} para{'\n'}
+          Enviamos um código via SMS para{'\n'}
           <Text style={styles.phone}>+{country.dial} {telefone}</Text>
         </Text>
 
@@ -155,7 +155,7 @@ export default function OtpLoginScreen() {
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.resendBtn} onPress={handleResend} disabled={loading}>
-          <Text style={styles.resendText}>Reenviar código via {channelLabel}</Text>
+          <Text style={styles.resendText}>Reenviar código via SMS</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.linkRow} onPress={() => { setStep('phone'); setCode(['', '', '', '', '', '']); setError(''); }}>
@@ -172,13 +172,13 @@ export default function OtpLoginScreen() {
       <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: spacing.lg }} keyboardShouldPersistTaps="handled">
         <View style={styles.iconContainer}>
-          <View style={[styles.iconCircle, styles.iconCircleWhatsApp]}>
-            <Feather name="message-circle" size={32} color="#25D366" />
+          <View style={styles.iconCircle}>
+            <Feather name="smartphone" size={32} color={colors.primary} />
           </View>
         </View>
 
         <Text style={styles.title}>Entrar com código</Text>
-        <Text style={styles.subtitle}>Digite seu número e escolha como receber o código de acesso</Text>
+        <Text style={styles.subtitle}>Digite seu número e enviaremos um código por SMS</Text>
 
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Telefone</Text>
@@ -204,27 +204,6 @@ export default function OtpLoginScreen() {
           {error && <Text style={styles.errorTextBelow}>{error}</Text>}
         </View>
 
-        {/* Seleção de canal */}
-        <View style={styles.channelSection}>
-          <Text style={styles.label}>Receber código via</Text>
-          <View style={styles.channelRow}>
-            <TouchableOpacity
-              style={[styles.channelBtn, channel === 'whatsapp' && styles.channelBtnActiveWA]}
-              onPress={() => setChannel('whatsapp')}
-            >
-              <Feather name="message-circle" size={20} color={channel === 'whatsapp' ? '#25D366' : colors.textLight} />
-              <Text style={[styles.channelText, channel === 'whatsapp' && styles.channelTextActiveWA]}>WhatsApp</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.channelBtn, channel === 'sms' && styles.channelBtnActiveSMS]}
-              onPress={() => setChannel('sms')}
-            >
-              <Feather name="smartphone" size={20} color={channel === 'sms' ? colors.primary : colors.textLight} />
-              <Text style={[styles.channelText, channel === 'sms' && styles.channelTextActiveSMS]}>SMS</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
         <Modal visible={showCountryPicker} transparent animationType="slide">
           <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowCountryPicker(false)}>
             <View style={styles.modalContent}>
@@ -248,16 +227,14 @@ export default function OtpLoginScreen() {
         </Modal>
 
         <TouchableOpacity
-          style={[styles.button, channel === 'whatsapp' ? styles.buttonWhatsApp : {}, loading && { opacity: 0.7 }]}
+          style={[styles.button, loading && { opacity: 0.7 }]}
           onPress={handleSendOtp}
           disabled={loading}
         >
           {loading ? (
             <ActivityIndicator color={colors.white} />
           ) : (
-            <Text style={styles.buttonText}>
-              Enviar código via {channel === 'whatsapp' ? 'WhatsApp' : 'SMS'}
-            </Text>
+            <Text style={styles.buttonText}>Enviar código via SMS</Text>
           )}
         </TouchableOpacity>
       </ScrollView>

@@ -7,10 +7,11 @@ import { useAuthStore } from '../../../src/stores/authStore';
 import WizardProgress from '../../../src/components/auth/WizardProgress';
 import { useState, useRef, useEffect } from 'react';
 import { translateAuthError } from '../../../src/utils/authErrors';
+import { trustDevice } from '../../../src/utils/deviceTrust';
 import type { OtpChannel } from '../../../src/services/auth.service';
 
 export default function CadastroStep2() {
-  const { telefone, countryDial } = useCadastroStore();
+  const { telefone, countryDial, email, senha } = useCadastroStore();
   const { sendOtp, verifyOtp } = useAuthStore();
   const [channel, setChannel] = useState<OtpChannel>('sms');
   const [code, setCode] = useState(['', '', '', '', '', '']);
@@ -66,7 +67,10 @@ export default function CadastroStep2() {
     setLoading(true);
     setError('');
     try {
-      await verifyOtp(getE164Phone(), fullCode);
+      await verifyOtp(getE164Phone(), fullCode, email, senha);
+      // Cadastro passou pelo OTP neste aparelho → marca como confiável (evita 2FA no 1º login)
+      const { user } = useAuthStore.getState();
+      if (user?.id) await trustDevice(user.id);
       router.push('/(auth)/cadastro/perfil');
     } catch (err: any) {
       setError(translateAuthError(err.message));
@@ -154,21 +158,6 @@ export default function CadastroStep2() {
         </Text>
       </TouchableOpacity>
 
-      {/* Trocar canal */}
-      <TouchableOpacity
-        style={styles.switchChannel}
-        onPress={() => handleResend(channel === 'whatsapp' ? 'sms' : 'whatsapp')}
-        disabled={loading || resendTimer > 0}
-      >
-        <Feather
-          name={channel === 'whatsapp' ? 'smartphone' : 'message-circle'}
-          size={16}
-          color={resendTimer > 0 ? colors.textLight : colors.primary}
-        />
-        <Text style={[styles.switchText, resendTimer > 0 && { color: colors.textLight }]}>
-          Receber via {channel === 'whatsapp' ? 'SMS' : 'WhatsApp'}
-        </Text>
-      </TouchableOpacity>
     </ScrollView>
     </KeyboardAvoidingView>
   );

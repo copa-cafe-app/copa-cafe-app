@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { colors, spacing, fontSize, borderRadius } from '../../../src/constants/theme';
 import { useCadastroStore } from '../../../src/stores/cadastroStore';
 import { useAuthStore } from '../../../src/stores/authStore';
+import { userService } from '../../../src/services/user.service';
 import WizardProgress from '../../../src/components/auth/WizardProgress';
 import { useState } from 'react';
 import { translateAuthError } from '../../../src/utils/authErrors';
@@ -11,10 +12,11 @@ import { COUNTRY_CODES, DEFAULT_COUNTRY, type CountryCode } from '../../../src/c
 
 export default function CadastroStep1() {
   const { email, senha, telefone, setField } = useCadastroStore();
-  const { signUp } = useAuthStore();
+  const { sendOtp } = useAuthStore();
   const [confirmarSenha, setConfirmarSenha] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [emailInUse, setEmailInUse] = useState(false);
   const [loading, setLoading] = useState(false);
   const [country, setCountry] = useState<CountryCode>(DEFAULT_COUNTRY);
   const [showCountryPicker, setShowCountryPicker] = useState(false);
@@ -32,22 +34,21 @@ export default function CadastroStep1() {
   }
 
   async function handleNext() {
+    setEmailInUse(false);
     if (!validate()) return;
     setLoading(true);
     try {
-      // signUp — se user já existe, ignora e segue
-      try {
-        await signUp(email, senha);
-      } catch (signUpErr: any) {
-        const msg = signUpErr?.message?.toLowerCase() || '';
-        if (!msg.includes('already registered') && !msg.includes('already been registered')) {
-          throw signUpErr;
-        }
-      }
-      // Save country dial and send OTP
-      setField('countryDial', country.dial);
-      const { sendOtp } = useAuthStore.getState();
       const e164Phone = '+' + country.dial + telefone.replace(/\D/g, '');
+      // Checa email/telefone duplicados ANTES de prosseguir — consulta leve no banco,
+      // sem chamar signUp (que tem rate limit e dispara "Muitas tentativas").
+      const dup = await userService.checkDuplicate({ email, telefone: e164Phone });
+      if (dup) {
+        if (dup.field === 'email') setEmailInUse(true);
+        setErrors({ [dup.field === 'telefone' ? 'telefone' : 'email']: dup.message });
+        return;
+      }
+      // A conta é criada de fato na Etapa 2 (verify-otp), já com email+senha confirmados.
+      setField('countryDial', country.dial);
       await sendOtp(e164Phone, 'sms');
       router.push('/(auth)/cadastro/verificacao');
     } catch (err: any) {
@@ -75,11 +76,17 @@ export default function CadastroStep1() {
             keyboardType="email-address"
             autoCapitalize="none"
             value={email}
-            onChangeText={(v) => setField('email', v)}
+            onChangeText={(v) => { setField('email', v); if (emailInUse) { setEmailInUse(false); setErrors((e) => ({ ...e, email: '' })); } }}
             placeholderTextColor={colors.textLight}
           />
         </View>
         {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
+        {emailInUse && (
+          <TouchableOpacity style={styles.loginCta} onPress={() => router.replace('/(auth)/login')}>
+            <Feather name="log-in" size={18} color={colors.primary} />
+            <Text style={styles.loginCtaText}>Já tenho conta — Fazer login</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       <View style={styles.inputGroup}>
@@ -212,6 +219,19 @@ const styles = StyleSheet.create({
   countryItemDialCode: { fontSize: fontSize.md, color: colors.textSecondary, fontWeight: '600' },
   hint: { fontSize: fontSize.xs, color: colors.textLight, marginTop: 4 },
   errorText: { fontSize: fontSize.xs, color: colors.error, marginTop: 4 },
+  loginCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+    height: 46,
+    borderRadius: borderRadius.md,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    backgroundColor: colors.surface,
+  },
+  loginCtaText: { color: colors.primary, fontSize: fontSize.md, fontWeight: '700' },
   nextButton: {
     flexDirection: 'row',
     backgroundColor: colors.primary,

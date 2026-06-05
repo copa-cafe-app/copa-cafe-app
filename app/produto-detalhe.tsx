@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator, Linking } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState, useEffect } from 'react';
@@ -184,7 +184,16 @@ export default function ProdutoDetalheScreen() {
               )}
             </View>
             {produto.fornecedores.whatsapp && (
-              <TouchableOpacity style={styles.whatsappBtn}>
+              <TouchableOpacity
+                style={styles.whatsappBtn}
+                onPress={() => {
+                  const num = String(produto.fornecedores?.whatsapp || '').replace(/\D/g, '');
+                  const texto = encodeURIComponent(`Olá! Tenho interesse no produto "${produto.nome}" no Copa Café.`);
+                  Linking.openURL(`https://wa.me/${num}?text=${texto}`).catch(() =>
+                    Alert.alert('WhatsApp', 'Não foi possível abrir o WhatsApp.')
+                  );
+                }}
+              >
                 <Feather name="message-circle" size={18} color="#25D366" />
               </TouchableOpacity>
             )}

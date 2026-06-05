@@ -111,12 +111,7 @@ export default function FazendaScreen() {
         subtitle="Tire uma foto para diagnóstico"
         onPress={() => router.push('/analise-planta')}
       />
-      <SectionButton
-        icon="shopping-bag"
-        title="Marketplace de Insumos"
-        subtitle="Fertilizantes, defensivos, sementes e mais"
-        onPress={() => router.push('/marketplace')}
-      />
+      {/* Marketplace escondido até ter pagamento real — reativar com SectionButton → /marketplace */}
     </ScrollView>
   );
 }
