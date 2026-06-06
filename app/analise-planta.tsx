@@ -3,7 +3,7 @@ import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system';
+import { File } from 'expo-file-system';
 import { colors, spacing, fontSize, borderRadius } from '../src/constants/theme';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../src/constants/config';
 
@@ -16,8 +16,8 @@ interface AnaliseResultado {
 }
 
 async function analisarComClaude(uri: string): Promise<AnaliseResultado> {
-  // Converter imagem para base64
-  const base64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' });
+  // Converter imagem para base64 (API nova do expo-file-system SDK 54)
+  const base64 = await new File(uri).base64();
 
   // Detectar tipo de mídia
   const ext = uri.split('.').pop()?.toLowerCase();
