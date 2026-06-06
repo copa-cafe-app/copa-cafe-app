@@ -53,6 +53,7 @@ function PickerModal({ visible, title, options, onSelect, onClose }: PickerModal
 export default function NovoLoteScreen() {
   const { user } = useAuthStore();
   const [variedade, setVariedade] = useState('');
+  const [variedadeOutro, setVariedadeOutro] = useState('');
   const [processo, setProcesso] = useState('');
   const [safra, setSafra] = useState('2025/26');
   const [sacas, setSacas] = useState('');
@@ -72,12 +73,17 @@ export default function NovoLoteScreen() {
       Alert.alert('Atenção', 'Preencha variedade, processo e quantidade de sacas');
       return;
     }
+    if (variedade === 'Outro' && !variedadeOutro.trim()) {
+      Alert.alert('Atenção', 'Informe o nome da variedade');
+      return;
+    }
     if (!user?.id) return;
+    const variedadeFinal = variedade === 'Outro' ? variedadeOutro.trim() : variedade;
     setSaving(true);
     try {
       const { error } = await supabase.from('lotes').insert({
         produtor_id: user.id,
-        variedade,
+        variedade: variedadeFinal,
         processo: processo.toUpperCase().replace(/ /g, '_'),
         safra,
         quantidade_sacas: parseInt(sacas),
@@ -122,6 +128,15 @@ export default function NovoLoteScreen() {
         onSelect={setVariedade}
         onClose={() => setShowVariedade(false)}
       />
+      {variedade === 'Outro' && (
+        <TextInput
+          style={[styles.input, { marginTop: spacing.sm }]}
+          value={variedadeOutro}
+          onChangeText={setVariedadeOutro}
+          placeholder="Digite o nome da variedade"
+          placeholderTextColor={colors.textLight}
+        />
+      )}
 
       {/* Processo */}
       <Text style={styles.label}>Processo</Text>
