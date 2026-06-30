@@ -1,7 +1,10 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Linking } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import Constants from 'expo-constants';
 import { colors, spacing, fontSize, borderRadius } from '../src/constants/theme';
+
+const APP_VERSION = Constants.expoConfig?.version ?? '1.0.2';
 
 export default function SobreScreen() {
   return (
@@ -17,7 +20,7 @@ export default function SobreScreen() {
       <View style={styles.logoSection}>
         <Image source={require('../assets/vertical.png')} style={styles.logo} resizeMode="contain" />
         <Text style={styles.appName}>Copa Café</Text>
-        <Text style={styles.version}>Versão 1.0.0</Text>
+        <Text style={styles.version}>Versão {APP_VERSION}</Text>
         <Text style={styles.tagline}>Gestão inteligente para cafeicultores</Text>
       </View>
 

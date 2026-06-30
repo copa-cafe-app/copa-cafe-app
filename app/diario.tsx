@@ -10,6 +10,7 @@ import { useWeatherStore } from '../src/stores/weatherStore';
 import { atividadeService } from '../src/services/atividade.service';
 import { userService } from '../src/services/user.service';
 import { uploadComprovante } from '../src/utils/uploadComprovante';
+import { parseBRL } from '../src/utils/format';
 import { exportAtividadesPDF } from '../src/utils/exportAtividades';
 import type { Propriedade } from '../src/types/user';
 import {
@@ -248,7 +249,7 @@ export default function DiarioScreen() {
     if (!user?.id) return;
     setSaving(true);
     try {
-      const custoNum = custo ? parseFloat(custo.replace(',', '.')) : 0;
+      const custoNum = parseBRL(custo) ?? 0;
       // O comprovante fica vinculado à despesa, que só existe quando há custo.
       let comprovanteUrl: string | null | undefined = undefined;
       if (comprovanteUri && custoNum > 0) {

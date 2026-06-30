@@ -5,6 +5,7 @@ import { useState, useCallback } from 'react';
 import { colors, spacing, fontSize, borderRadius } from '../../../src/constants/theme';
 import { supabase } from '../../../src/services/supabase';
 import { useAuthStore } from '../../../src/stores/authStore';
+import { formatBRL } from '../../../src/utils/format';
 
 const FILTROS = [
   { key: 'TODOS', label: 'Todos' },
@@ -59,7 +60,7 @@ function LoteCard({ lote }: { lote: Lote }) {
         {lote.preco_por_saca != null && (
           <View style={styles.stat}>
             <Feather name="dollar-sign" size={14} color={colors.textSecondary} />
-            <Text style={styles.statText}>R$ {lote.preco_por_saca.toLocaleString('pt-BR')}/sc</Text>
+            <Text style={styles.statText}>{formatBRL(lote.preco_por_saca)}/sc</Text>
           </View>
         )}
         {lote.bebida && (

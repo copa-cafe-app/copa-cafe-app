@@ -25,6 +25,7 @@ export const COUNTRY_CODES: CountryCode[] = [
   { code: 'CU', dial: '53', flag: '\u{1F1E8}\u{1F1FA}', name: 'Cuba' },
   { code: 'JM', dial: '1876', flag: '\u{1F1EF}\u{1F1F2}', name: 'Jamaica' },
   { code: 'PY', dial: '595', flag: '\u{1F1F5}\u{1F1FE}', name: 'Paraguai' },
+  { code: 'IN', dial: '91', flag: '\u{1F1EE}\u{1F1F3}', name: 'Índia' },
 ];
 
 export const DEFAULT_COUNTRY = COUNTRY_CODES[0]; // Brasil

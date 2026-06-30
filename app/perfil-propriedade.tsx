@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import { colors, spacing, fontSize, borderRadius } from '../src/constants/theme';
 import { useAuthStore } from '../src/stores/authStore';
 import { supabase } from '../src/services/supabase';
+import { parseBRL } from '../src/utils/format';
 
 export default function PropriedadeScreen() {
   const { user } = useAuthStore();
@@ -42,8 +43,8 @@ export default function PropriedadeScreen() {
     try {
       const updates = {
         nome,
-        area_total_hectares: area ? parseFloat(area) : null,
-        altitude_metros: altitude ? parseFloat(altitude) : null,
+        area_total_hectares: parseBRL(area),
+        altitude_metros: parseBRL(altitude),
         regiao_cafeeira: regiao || null,
       };
       if (propId) {

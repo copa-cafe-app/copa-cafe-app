@@ -5,6 +5,8 @@ import { useState, useCallback } from 'react';
 import { colors, spacing, fontSize, borderRadius } from '../../../src/constants/theme';
 import { supabase } from '../../../src/services/supabase';
 import { useAuthStore } from '../../../src/stores/authStore';
+import { formatBRL } from '../../../src/utils/format';
+import { safraAtual } from '../../../src/utils/safra';
 
 function SectionButton({ icon, title, subtitle, onPress }: { icon: string; title: string; subtitle: string; onPress?: () => void }) {
   return (
@@ -100,7 +102,7 @@ export default function FazendaScreen() {
       <SectionButton
         icon="dollar-sign"
         title="Custos de Produção"
-        subtitle={totalDespesas > 0 ? `Safra 2025/26 • R$ ${totalDespesas.toLocaleString('pt-BR')}` : 'Nenhuma despesa registrada'}
+        subtitle={totalDespesas > 0 ? `Safra ${safraAtual()} • ${formatBRL(totalDespesas)}` : 'Nenhuma despesa registrada'}
         onPress={() => router.push('/custos')}
       />
 

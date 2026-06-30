@@ -6,6 +6,7 @@ import { useFocusEffect } from 'expo-router';
 import { colors, spacing, fontSize, borderRadius } from '../src/constants/theme';
 import { supabase } from '../src/services/supabase';
 import { useAuthStore } from '../src/stores/authStore';
+import { parseBRL } from '../src/utils/format';
 
 interface Talhao {
   id: string;
@@ -46,14 +47,15 @@ export default function TalhoesScreen() {
   );
 
   async function handleSave() {
-    if (!nome || !area) { Alert.alert('Atenção', 'Preencha nome e área'); return; }
+    const areaNum = parseBRL(area);
+    if (!nome || areaNum == null || areaNum <= 0) { Alert.alert('Atenção', 'Preencha nome e uma área válida'); return; }
     if (!user?.id) return;
     setSaving(true);
     try {
       const { error } = await supabase.from('talhoes').insert({
         produtor_id: user.id,
         nome,
-        area_hectares: parseFloat(area),
+        area_hectares: areaNum,
         variedade: variedade || null,
         altitude_metros: altitude ? parseInt(altitude) : null,
         ano_plantio: anoPlantio ? parseInt(anoPlantio) : null,

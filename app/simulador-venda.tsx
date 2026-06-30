@@ -6,6 +6,7 @@ import { colors, spacing, fontSize, borderRadius } from '../src/constants/theme'
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../src/constants/config';
 import { supabase } from '../src/services/supabase';
 import { useAuthStore } from '../src/stores/authStore';
+import { parseBRL } from '../src/utils/format';
 
 export default function SimuladorVendaScreen() {
   const { user } = useAuthStore();
@@ -43,7 +44,7 @@ export default function SimuladorVendaScreen() {
   }, []);
 
   const qtdSacas = parseInt(sacas) || 0;
-  const precoSaca = precoManual ? parseFloat(precoManual.replace(',', '.')) : cotacaoAtual;
+  const precoSaca = precoManual ? (parseBRL(precoManual) ?? cotacaoAtual) : cotacaoAtual;
   const receitaBruta = qtdSacas * precoSaca;
   const custoTotal = qtdSacas * custoMedioSaca;
   const lucro = receitaBruta - custoTotal;

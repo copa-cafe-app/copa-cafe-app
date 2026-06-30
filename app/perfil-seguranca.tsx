@@ -3,6 +3,7 @@ import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { colors, spacing, fontSize, borderRadius } from '../src/constants/theme';
+import { validatePassword } from '../src/utils/validators';
 import { supabase } from '../src/services/supabase';
 
 export default function SegurancaScreen() {
@@ -22,9 +23,8 @@ export default function SegurancaScreen() {
   }
 
   async function handleChangePassword() {
-    if (novaSenha.length < 8) { setError('A nova senha deve ter no mínimo 8 caracteres'); return; }
-    if (!/[A-Z]/.test(novaSenha)) { setError('A senha precisa de ao menos 1 letra maiúscula'); return; }
-    if (!/[0-9]/.test(novaSenha)) { setError('A senha precisa de ao menos 1 número'); return; }
+    const senhaCheck = validatePassword(novaSenha);
+    if (!senhaCheck.valid) { setError(senhaCheck.message!); return; }
     if (novaSenha !== confirmar) { setError('As senhas não conferem'); return; }
     setSaving(true);
     setError('');

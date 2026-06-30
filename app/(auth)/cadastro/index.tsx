@@ -8,6 +8,7 @@ import { userService } from '../../../src/services/user.service';
 import WizardProgress from '../../../src/components/auth/WizardProgress';
 import { useState } from 'react';
 import { translateAuthError } from '../../../src/utils/authErrors';
+import { validatePassword } from '../../../src/utils/validators';
 import { COUNTRY_CODES, DEFAULT_COUNTRY, type CountryCode } from '../../../src/constants/countryCodes';
 
 export default function CadastroStep1() {
@@ -24,9 +25,8 @@ export default function CadastroStep1() {
   function validate() {
     const errs: Record<string, string> = {};
     if (!email.includes('@')) errs.email = 'Email inválido';
-    if (senha.length < 8) errs.senha = 'Mínimo 8 caracteres';
-    if (!/[A-Z]/.test(senha)) errs.senha = 'Precisa ter 1 letra maiúscula';
-    if (!/[0-9]/.test(senha)) errs.senha = 'Precisa ter 1 número';
+    const senhaCheck = validatePassword(senha);
+    if (!senhaCheck.valid) errs.senha = senhaCheck.message!;
     if (senha !== confirmarSenha) errs.confirmarSenha = 'Senhas não conferem';
     if (telefone.replace(/\D/g, '').length < 10) errs.telefone = 'Telefone inválido';
     setErrors(errs);

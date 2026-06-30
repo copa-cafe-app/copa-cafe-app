@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { colors, spacing, fontSize, borderRadius } from '../src/constants/theme';
 import { authService } from '../src/services/auth.service';
 import { useAuthStore } from '../src/stores/authStore';
+import { validatePassword } from '../src/utils/validators';
 
 export default function RedefinirSenhaScreen() {
   const [novaSenha, setNovaSenha] = useState('');
@@ -15,8 +16,9 @@ export default function RedefinirSenhaScreen() {
   const [done, setDone] = useState(false);
 
   async function handleReset() {
-    if (novaSenha.length < 6) {
-      setError('A senha deve ter pelo menos 6 caracteres');
+    const senhaCheck = validatePassword(novaSenha);
+    if (!senhaCheck.valid) {
+      setError(senhaCheck.message!);
       return;
     }
     if (novaSenha !== confirmarSenha) {

@@ -8,6 +8,7 @@ import { userService } from '../../../src/services/user.service';
 import WizardProgress from '../../../src/components/auth/WizardProgress';
 import { useState } from 'react';
 import { translateAuthError } from '../../../src/utils/authErrors';
+import { parseBRL } from '../../../src/utils/format';
 
 function CheckItem({ checked, label, onPress, required }: { checked: boolean; label: string; onPress: () => void; required?: boolean }) {
   return (
@@ -63,8 +64,8 @@ export default function CadastroStep5() {
       await userService.createPropriedade({
         produtor_id: user.id,
         nome: nomeFazenda,
-        area_total_hectares: parseFloat(areaHectares) || 0,
-        altitude_metros: altitudeMetros ? parseFloat(altitudeMetros) : undefined,
+        area_total_hectares: parseBRL(areaHectares) ?? 0,
+        altitude_metros: parseBRL(altitudeMetros) ?? undefined,
         regiao_cafeeira: regiaoCafeeira || undefined,
         municipio: municipio || undefined,
         estado: estado || undefined,

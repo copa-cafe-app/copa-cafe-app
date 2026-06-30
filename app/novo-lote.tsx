@@ -6,9 +6,11 @@ import { colors, spacing, fontSize, borderRadius } from '../src/constants/theme'
 import { useAuthStore } from '../src/stores/authStore';
 import { supabase } from '../src/services/supabase';
 import { coffeeVarieties } from '../src/constants/varieties';
+import { safraAtual, safrasSelecao } from '../src/utils/safra';
+import { parseBRL } from '../src/utils/format';
 
 const PROCESSOS = ['Natural', 'Lavado', 'Honey', 'Descascado', 'Cereja Descascado'];
-const SAFRAS = ['2026/27', '2025/26', '2024/25'];
+const SAFRAS = safrasSelecao();
 const BEBIDAS = ['Estritamente Mole', 'Mole', 'Apenas Mole', 'Dura', 'Riada', 'Rio', 'Rio Zona'];
 const PENEIRAS = ['17/18', '16/17', '15/16', '14/15', '13', 'Moka', 'Bica corrida'];
 
@@ -55,7 +57,7 @@ export default function NovoLoteScreen() {
   const [variedade, setVariedade] = useState('');
   const [variedadeOutro, setVariedadeOutro] = useState('');
   const [processo, setProcesso] = useState('');
-  const [safra, setSafra] = useState('2025/26');
+  const [safra, setSafra] = useState(safraAtual());
   const [sacas, setSacas] = useState('');
   const [preco, setPreco] = useState('');
   const [bebida, setBebida] = useState('');
@@ -87,7 +89,7 @@ export default function NovoLoteScreen() {
         processo: processo.toUpperCase().replace(/ /g, '_'),
         safra,
         quantidade_sacas: parseInt(sacas),
-        preco_por_saca: preco ? parseFloat(preco) : null,
+        preco_por_saca: parseBRL(preco),
         bebida: bebida || null,
         peneira: peneira || null,
         cata: cata ? parseInt(cata) : null,

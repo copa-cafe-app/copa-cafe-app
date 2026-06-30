@@ -6,6 +6,8 @@ import * as ImagePicker from 'expo-image-picker';
 import { colors, spacing, fontSize, borderRadius } from '../src/constants/theme';
 import { supabase } from '../src/services/supabase';
 import { useAuthStore } from '../src/stores/authStore';
+import { safraAtual } from '../src/utils/safra';
+import { parseBRL } from '../src/utils/format';
 
 const CATEGORIAS = [
   { value: 'INSUMOS', label: 'Insumos' },
@@ -229,8 +231,8 @@ export default function NovaDespesaScreen() {
       Alert.alert('Atenção', 'Preencha todos os campos obrigatórios');
       return;
     }
-    const valorNum = parseFloat(valor.replace(',', '.'));
-    if (isNaN(valorNum) || valorNum <= 0) {
+    const valorNum = parseBRL(valor);
+    if (valorNum == null || valorNum <= 0) {
       Alert.alert('Atenção', 'Valor inválido');
       return;
     }
@@ -254,7 +256,7 @@ export default function NovaDespesaScreen() {
         descricao,
         valor: valorNum,
         data: isoDate,
-        safra: '2025/26',
+        safra: safraAtual(),
         comprovante_url: comprovanteUrl,
         vendor: vendor || null,
         ocr_raw: ocrRaw,
@@ -275,9 +277,9 @@ export default function NovaDespesaScreen() {
     const rows = [];
     for (let i = 0; i < multiItems.length; i++) {
       const it = multiItems[i];
-      const valorNum = parseFloat(it.valor.replace(',', '.'));
+      const valorNum = parseBRL(it.valor);
       const isoDate = toISODate(it.data);
-      if (!it.descricao || isNaN(valorNum) || valorNum <= 0 || !isoDate) {
+      if (!it.descricao || valorNum == null || valorNum <= 0 || !isoDate) {
         Alert.alert('Atenção', `Revise o item ${i + 1}: descrição, valor e data são obrigatórios.`);
         return;
       }
@@ -287,7 +289,7 @@ export default function NovaDespesaScreen() {
         descricao: it.descricao,
         valor: valorNum,
         data: isoDate,
-        safra: '2025/26',
+        safra: safraAtual(),
         vendor: vendor || null,
         ocr_raw: ocrRaw,
       });

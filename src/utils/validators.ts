@@ -57,6 +57,15 @@ export function validateCNPJ(cnpj: string): boolean {
   return true;
 }
 
+// Política de senha única do app (antes divergia: cadastro exigia 8+maiúscula+número,
+// redefinição aceitava 6). Retorna a primeira falha encontrada, em ordem.
+export function validatePassword(senha: string): { valid: boolean; message?: string } {
+  if (senha.length < 8) return { valid: false, message: 'Mínimo 8 caracteres' };
+  if (!/[A-Z]/.test(senha)) return { valid: false, message: 'Precisa ter 1 letra maiúscula' };
+  if (!/[0-9]/.test(senha)) return { valid: false, message: 'Precisa ter 1 número' };
+  return { valid: true };
+}
+
 export function validateCPFCNPJ(value: string): { valid: boolean; message?: string } {
   const digits = value.replace(/\D/g, '');
 

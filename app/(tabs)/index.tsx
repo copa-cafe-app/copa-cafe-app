@@ -9,6 +9,7 @@ import { supabase } from '../../src/services/supabase';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../../src/constants/config';
 import { userService } from '../../src/services/user.service';
 import { Propriedade } from '../../src/types/user';
+import { safraAtual } from '../../src/utils/safra';
 
 function QuickActionButton({ icon, label, onPress }: { icon: string; label: string; onPress?: () => void }) {
   return (
@@ -351,7 +352,7 @@ export default function HomeScreen() {
 
       {/* Resumo da Safra - só exibe quando há lotes */}
       {safraStats.total > 0 && (
-        <InfoCard title="Safra 2025/26" icon="bar-chart-2">
+        <InfoCard title={`Safra ${safraAtual()}`} icon="bar-chart-2">
           <View style={styles.safraGrid}>
             <View style={styles.safraItem}>
               <Text style={styles.safraNumber}>{safraStats.total}</Text>

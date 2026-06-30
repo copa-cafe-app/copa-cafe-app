@@ -5,6 +5,7 @@ import { useState, useCallback } from 'react';
 import { colors, spacing, fontSize, borderRadius } from '../src/constants/theme';
 import { supabase } from '../src/services/supabase';
 import { useAuthStore } from '../src/stores/authStore';
+import { parseBRL } from '../src/utils/format';
 
 interface Alerta {
   id: string;
@@ -45,13 +46,18 @@ export default function AlertasPrecoScreen() {
 
   async function handleCreate() {
     if (!precoAlvo || !user?.id) return;
+    const alvo = parseBRL(precoAlvo);
+    if (alvo == null || alvo <= 0) {
+      Alert.alert('Atenção', 'Informe um preço alvo válido');
+      return;
+    }
     setSaving(true);
     try {
       const { error } = await supabase.from('alertas_preco').insert({
         produtor_id: user.id,
         tipo_cafe: tipoCafe,
         condicao,
-        preco_alvo: parseFloat(precoAlvo.replace(',', '.')),
+        preco_alvo: alvo,
       });
       if (error) throw error;
       setShowModal(false);

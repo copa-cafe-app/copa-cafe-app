@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import type { Atividade, AtividadeTipo } from '../types/atividade';
+import { safraAtual } from '../utils/safra';
 
 // Mapeia o tipo de atividade do Diário para a categoria de despesa de produção.
 const TIPO_TO_CATEGORIA: Record<AtividadeTipo, string> = {
@@ -11,7 +12,7 @@ const TIPO_TO_CATEGORIA: Record<AtividadeTipo, string> = {
   OUTRO: 'OUTROS',
 };
 
-const SAFRA_ATUAL = '2025/26';
+const SAFRA_ATUAL = safraAtual();
 
 // Cria/atualiza a despesa vinculada a uma atividade (origem='DIARIO').
 // Se a atividade não tem custo, remove a despesa vinculada (se houver).

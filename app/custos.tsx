@@ -6,6 +6,8 @@ import { colors, spacing, fontSize, borderRadius } from '../src/constants/theme'
 import { supabase } from '../src/services/supabase';
 import { useAuthStore } from '../src/stores/authStore';
 import { exportDespesasPDF } from '../src/utils/exportDespesas';
+import { formatBRL } from '../src/utils/format';
+import { safraAtual } from '../src/utils/safra';
 
 interface Despesa {
   id: string;
@@ -122,8 +124,8 @@ export default function CustosScreen() {
       filtered = despesas.filter((d) => d.data.startsWith(String(ano)));
       label = `Ano ${ano}`;
     } else if (periodo === 'safra') {
-      filtered = despesas.filter((d) => d.safra === '2025/26');
-      label = 'Safra 2025/26';
+      filtered = despesas.filter((d) => d.safra === safraAtual());
+      label = `Safra ${safraAtual()}`;
     }
     if (filtered.length === 0) {
       Alert.alert('Sem despesas', 'Nenhuma despesa encontrada para o período selecionado.');
@@ -179,8 +181,8 @@ export default function CustosScreen() {
         <ScrollView contentContainerStyle={styles.content}>
           {/* Resumo */}
           <View style={styles.resumoCard}>
-            <Text style={styles.resumoLabel}>Total - Safra 2025/26</Text>
-            <Text style={styles.resumoValor}>R$ {totalDespesas.toLocaleString('pt-BR')}</Text>
+            <Text style={styles.resumoLabel}>Total geral</Text>
+            <Text style={styles.resumoValor}>{formatBRL(totalDespesas)}</Text>
             <View style={styles.resumoRow}>
               <View style={styles.resumoItem}>
                 <Text style={styles.resumoItemLabel}>Custo/saca (est.)</Text>
@@ -222,7 +224,7 @@ export default function CustosScreen() {
                       {categoriaLabels[d.categoria] || d.categoria} • {new Date(d.data + 'T00:00:00').toLocaleDateString('pt-BR')}
                     </Text>
                   </View>
-                  <Text style={styles.despesaValor}>R$ {d.valor.toLocaleString('pt-BR')}</Text>
+                  <Text style={styles.despesaValor}>{formatBRL(d.valor)}</Text>
                   {d.comprovante_url ? (
                     <TouchableOpacity
                       style={styles.comprovanteBtn}
@@ -260,7 +262,7 @@ export default function CustosScreen() {
             <TouchableOpacity style={styles.exportOption} onPress={() => handleExport('safra')}>
               <Feather name="coffee" size={20} color={colors.primary} />
               <View style={{ flex: 1 }}>
-                <Text style={styles.exportOptionText}>Safra 2025/26</Text>
+                <Text style={styles.exportOptionText}>Safra {safraAtual()}</Text>
                 <Text style={styles.exportOptionHint}>Todos os custos da safra atual</Text>
               </View>
             </TouchableOpacity>
