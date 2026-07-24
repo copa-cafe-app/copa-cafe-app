@@ -1,5 +1,6 @@
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { colors, spacing, fontSize, borderRadius } from '../../../src/constants/theme';
 import { useCadastroStore } from '../../../src/stores/cadastroStore';
@@ -30,6 +31,7 @@ export default function CadastroStep5() {
     nomeFazenda, areaHectares, altitudeMetros, regiaoCafeeira,
   } = useCadastroStore();
   const { user, loadProfile } = useAuthStore();
+  const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -88,7 +90,11 @@ export default function CadastroStep5() {
   }
 
   return (
-    <View style={styles.container}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={[styles.content, { paddingBottom: spacing.lg + insets.bottom }]}
+      keyboardShouldPersistTaps="handled"
+    >
       <WizardProgress current={5} />
 
       <View style={styles.iconContainer}>
@@ -155,12 +161,13 @@ export default function CadastroStep5() {
           </>
         )}
       </TouchableOpacity>
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background, padding: spacing.lg, paddingTop: spacing.xl },
+  container: { flex: 1, backgroundColor: colors.background },
+  content: { padding: spacing.lg, paddingTop: spacing.xl },
   iconContainer: { alignItems: 'center', marginBottom: spacing.lg },
   iconCircle: {
     width: 72,

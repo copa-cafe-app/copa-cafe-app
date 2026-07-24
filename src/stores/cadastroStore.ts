@@ -8,6 +8,7 @@ interface CadastroState {
   countryDial: string;
   // Step 2
   otpCode: string;
+  otpChannel: 'whatsapp' | 'sms'; // canal realmente usado no envio (step1 → step2)
   // Step 3
   nome: string;
   cpfCnpj: string;
@@ -33,6 +34,7 @@ const initialState = {
   telefone: '',
   countryDial: '55',
   otpCode: '',
+  otpChannel: 'sms' as 'whatsapp' | 'sms',
   nome: '',
   cpfCnpj: '',
   estado: '',

@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../constants/config';
+import { SUPABASE_URL, SUPABASE_ANON_KEY, DEFAULT_OTP_CHANNEL } from '../constants/config';
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import * as QueryParams from 'expo-auth-session/build/QueryParams';
@@ -23,26 +23,46 @@ export const authService = {
     return data;
   },
 
-  // Enviar OTP via WhatsApp ou SMS (Twilio Verify)
-  async sendOtp(phone: string, channel: OtpChannel = 'whatsapp') {
-    const maxRetries = 2;
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      try {
-        const res = await fetch(`${SUPABASE_URL}/functions/v1/send-otp`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-          },
-          body: JSON.stringify({ phone, channel }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Erro ao enviar código');
-        return data;
-      } catch (err) {
-        if (attempt === maxRetries) throw err;
-        await new Promise(r => setTimeout(r, 1000));
+  // Enviar OTP via WhatsApp ou SMS (Twilio Verify).
+  // Retorna { ...data, channel } com o canal REALMENTE usado. Se o WhatsApp
+  // falhar (ex.: sender ainda não aprovado pela Meta), cai automaticamente pro
+  // SMS e devolve channel:'sms' + fellBackToSms:true, pra UI ajustar o texto.
+  async sendOtp(phone: string, channel: OtpChannel = DEFAULT_OTP_CHANNEL) {
+    const attemptSend = async (ch: OtpChannel) => {
+      const maxRetries = 2;
+      let lastErr: any;
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+          const res = await fetch(`${SUPABASE_URL}/functions/v1/send-otp`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+            },
+            body: JSON.stringify({ phone, channel: ch }),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || 'Erro ao enviar código');
+          return data;
+        } catch (err) {
+          lastErr = err;
+          if (attempt < maxRetries) await new Promise(r => setTimeout(r, 1000));
+        }
       }
+      throw lastErr;
+    };
+
+    try {
+      const data = await attemptSend(channel);
+      return { ...data, channel };
+    } catch (err) {
+      // WhatsApp indisponível → fallback automático pro SMS (nunca deixa o
+      // usuário travado). Se já era SMS, propaga o erro normalmente.
+      if (channel === 'whatsapp') {
+        const data = await attemptSend('sms');
+        return { ...data, channel: 'sms' as OtpChannel, fellBackToSms: true };
+      }
+      throw err;
     }
   },
 

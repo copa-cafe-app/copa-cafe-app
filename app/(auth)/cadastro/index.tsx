@@ -10,6 +10,7 @@ import { useState } from 'react';
 import { translateAuthError } from '../../../src/utils/authErrors';
 import { validatePassword } from '../../../src/utils/validators';
 import { COUNTRY_CODES, DEFAULT_COUNTRY, type CountryCode } from '../../../src/constants/countryCodes';
+import { DEFAULT_OTP_CHANNEL } from '../../../src/constants/config';
 
 export default function CadastroStep1() {
   const { email, senha, telefone, setField } = useCadastroStore();
@@ -49,7 +50,10 @@ export default function CadastroStep1() {
       }
       // A conta é criada de fato na Etapa 2 (verify-otp), já com email+senha confirmados.
       setField('countryDial', country.dial);
-      await sendOtp(e164Phone, 'sms');
+      // Envia pelo canal padrão (WhatsApp se habilitado, senão SMS). Se o WhatsApp
+      // falhar, o service cai pro SMS sozinho — guardamos o canal REAL pra Etapa 2.
+      const res = await sendOtp(e164Phone, DEFAULT_OTP_CHANNEL);
+      setField('otpChannel', res.channel);
       router.push('/(auth)/cadastro/verificacao');
     } catch (err: any) {
       setErrors({ email: translateAuthError(err.message) });

@@ -3,12 +3,14 @@ import { Feather } from '@expo/vector-icons';
 import { useState, useCallback } from 'react';
 import { useFocusEffect, router } from 'expo-router';
 import { colors, spacing, fontSize, borderRadius } from '../../../src/constants/theme';
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../../../src/constants/config';
+import { SUPABASE_URL, SUPABASE_ANON_KEY, WHATSAPP_NEGOCIACAO } from '../../../src/constants/config';
 
 // Copa Café prices — same data feed used by coffeecopa.com/precos.html
 // The website renders client-side from this Google Sheets CSV; we fetch it directly.
 const COPA_CAFE_PRICES_URL = 'https://docs.google.com/spreadsheets/d/1wNX2fPobme6rAE869H8Zrv82K8eCjaDadE30DHU48tc/gviz/tq?tqx=out:csv&sheet=tabela';
-const WHATSAPP_URL = 'https://wa.me/5533999465365';
+// Número do CTA vem de config (WHATSAPP_NEGOCIACAO) — trocar lá quando o número
+// dedicado existir; o atual vira sender do OTP. Ver memória project_cta_whatsapp_swap.
+const WHATSAPP_URL = `https://wa.me/${WHATSAPP_NEGOCIACAO}`;
 const WHATSAPP_CHANNEL = 'https://whatsapp.com/channel/0029Vb6Qo3fL7UVRzGS4fn3M';
 
 interface MarketData {

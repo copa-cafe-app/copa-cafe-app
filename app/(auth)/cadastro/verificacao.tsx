@@ -9,11 +9,13 @@ import { useState, useRef, useEffect } from 'react';
 import { translateAuthError } from '../../../src/utils/authErrors';
 import { trustDevice } from '../../../src/utils/deviceTrust';
 import type { OtpChannel } from '../../../src/services/auth.service';
+import { WHATSAPP_ENABLED } from '../../../src/constants/config';
 
 export default function CadastroStep2() {
-  const { telefone, countryDial, email, senha } = useCadastroStore();
+  const { telefone, countryDial, email, senha, otpChannel } = useCadastroStore();
   const { sendOtp, verifyOtp } = useAuthStore();
-  const [channel, setChannel] = useState<OtpChannel>('sms');
+  // Canal já usado no envio da Etapa 1 (pode ter caído do WhatsApp pro SMS).
+  const [channel, setChannel] = useState<OtpChannel>(otpChannel);
   const [code, setCode] = useState(['', '', '', '', '', '']);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -81,11 +83,11 @@ export default function CadastroStep2() {
 
   async function handleResend(newChannel?: OtpChannel) {
     const sendChannel = newChannel || channel;
-    if (newChannel) setChannel(newChannel);
     setLoading(true);
     setError('');
     try {
-      await sendOtp(getE164Phone(), sendChannel);
+      const res = await sendOtp(getE164Phone(), sendChannel);
+      setChannel(res.channel); // reflete o canal real (fallback whatsapp→sms)
       setResendTimer(60);
     } catch (err: any) {
       setError(translateAuthError(err.message));
@@ -157,6 +159,23 @@ export default function CadastroStep2() {
           {resendTimer > 0 ? `Reenviar em ${resendTimer}s` : `Reenviar via ${channelLabel}`}
         </Text>
       </TouchableOpacity>
+
+      {WHATSAPP_ENABLED && (
+        <TouchableOpacity
+          style={styles.switchChannel}
+          onPress={() => handleResend(channel === 'whatsapp' ? 'sms' : 'whatsapp')}
+          disabled={loading}
+        >
+          <Feather
+            name={channel === 'whatsapp' ? 'smartphone' : 'message-circle'}
+            size={16}
+            color={colors.primary}
+          />
+          <Text style={styles.switchText}>
+            {channel === 'whatsapp' ? 'Receber por SMS' : 'Receber por WhatsApp'}
+          </Text>
+        </TouchableOpacity>
+      )}
 
     </ScrollView>
     </KeyboardAvoidingView>

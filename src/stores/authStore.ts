@@ -1,7 +1,11 @@
 import { create } from 'zustand';
 import { authService, type OtpChannel } from '../services/auth.service';
 import { userService } from '../services/user.service';
+import { DEFAULT_OTP_CHANNEL } from '../constants/config';
 import type { User } from '../types/user';
+
+// Resultado do envio de OTP: canal realmente usado (pode ter caído pro SMS).
+export interface SendOtpResult { channel: OtpChannel; fellBackToSms?: boolean }
 
 interface AuthState {
   user: any | null;
@@ -15,7 +19,7 @@ interface AuthState {
   loadProfile: () => Promise<void>;
   signUp: (email: string, password: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
-  sendOtp: (phone: string, channel?: OtpChannel) => Promise<void>;
+  sendOtp: (phone: string, channel?: OtpChannel) => Promise<SendOtpResult>;
   verifyOtp: (phone: string, code: string, email?: string, password?: string) => Promise<{ is_new_user?: boolean }>;
   // Fallback SMS nativo do Supabase
   sendSmsOtp: (phone: string) => Promise<void>;
@@ -98,12 +102,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
-  // WhatsApp / SMS via Twilio Verify (Edge Functions)
-  sendOtp: async (phone, channel = 'whatsapp') => {
+  // WhatsApp / SMS via Twilio Verify (Edge Functions).
+  // Devolve o canal realmente usado (WhatsApp pode ter caído pro SMS).
+  sendOtp: async (phone, channel = DEFAULT_OTP_CHANNEL) => {
     set({ loading: true, error: null });
     try {
-      await authService.sendOtp(phone, channel);
+      const data = await authService.sendOtp(phone, channel);
       set({ loading: false });
+      return { channel: data.channel as OtpChannel, fellBackToSms: data.fellBackToSms };
     } catch (err: any) {
       set({ error: err.message, loading: false });
       throw err;
