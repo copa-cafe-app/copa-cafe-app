@@ -7,10 +7,12 @@ const corsHeaders = {
 
 // Converte preço da ICE (centavos de dólar por libra) para reais por saca de 60kg
 // 1 saca = 132.277 libras (60kg)
-function icePriceToReaisPorSaca(centsPerLb: number, usdBrl: number): number {
-  const usdPerSaca = (centsPerLb / 100) * 132.277;
-  return Math.round(usdPerSaca * usdBrl * 100) / 100;
-}
+// A conversão do ICE para R$/saca foi REMOVIDA de propósito (24/07/2026).
+// O ICE (KC=F) é referência de mercado internacional e é publicado em US¢/lb —
+// convertê-lo para reais por saca sugeria um preço de venda comparável ao da
+// Copa, e três telas acabaram usando esse número no lugar do preço real.
+// O preço divulgado ao produtor é sempre o da tabela da Copa Café do dia
+// (src/services/copaPrices.service.ts). Esta função devolve o ICE só em dólar.
 
 // Helper: fetch with timeout (Deno Edge Functions podem travar em fetches longos)
 async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 8000): Promise<Response> {
@@ -184,11 +186,6 @@ serve(async (req) => {
       debug.push('Bolsa: todas as fontes falharam');
     }
 
-    // Converter para reais por saca
-    const arabicaReaisSaca = arabicaCentsLb > 0
-      ? icePriceToReaisPorSaca(arabicaCentsLb, usdBrl)
-      : 0;
-
     const response = {
       cambio: {
         usd_brl: usdBrl,
@@ -200,7 +197,6 @@ serve(async (req) => {
       },
       bolsa: {
         cents_per_lb: Math.round(arabicaCentsLb * 100) / 100,
-        preco_saca_brl: arabicaReaisSaca,
         variacao_percent: arabicaVariacao,
         fonte: bolsaFonte,
         simbolo: 'KC=F',

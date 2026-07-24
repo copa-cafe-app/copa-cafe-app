@@ -1,0 +1,14 @@
+Notas da versão — Copa Café v1.0.2 (versionCode 5)
+Idioma: Português (Brasil) — pt-BR
+Limite do Play Console: 500 caracteres. O texto abaixo tem ~430.
+================================================================
+
+Nesta versão:
+
+• Saúde da Planta e leitura de recibos voltaram a funcionar
+• Diário de campo integrado com o controle de custos
+• Mais variedades de café no cadastro de lote, com opção "Outro"
+• Correções nos cálculos de custo por saca e valores em reais
+• Correção do botão "Criar minha conta" em celulares Android novos
+• Suporte a telefones internacionais no cadastro
+• Melhorias de segurança e estabilidade

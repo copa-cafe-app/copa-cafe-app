@@ -5,7 +5,8 @@ import { useState, useEffect } from 'react';
 import { colors, spacing, fontSize, borderRadius } from '../src/constants/theme';
 import { supabase } from '../src/services/supabase';
 import { useAuthStore } from '../src/stores/authStore';
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../src/constants/config';
+import { fetchCopaPrices, precoDestaque } from '../src/services/copaPrices.service';
+import { formatBRL } from '../src/utils/format';
 
 interface Notificacao {
   id: string;
@@ -34,23 +35,31 @@ export default function NotificacoesScreen() {
     // 1. Checar alertas de preço disparados
     if (user?.id) {
       try {
-        const [alertasRes, pricesRes] = await Promise.all([
+        const [alertasRes, feed] = await Promise.all([
           supabase.from('alertas_preco').select('*').eq('produtor_id', user.id).eq('ativo', true),
-          fetch(`${SUPABASE_URL}/functions/v1/coffee-prices`, {
-            headers: { 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
-          }).then((r) => r.json()),
+          fetchCopaPrices(),
         ]);
 
-        if (alertasRes.data && pricesRes.arabica) {
+        // O alerta compara com o PREÇO DA COPA (Bebida/Duro cata 20 — o mesmo em
+        // destaque na tela de cotações), não com a bolsa. É o preço que a Copa
+        // paga pela saca e o único que o produtor tem em mente ao definir o alvo.
+        // Antes este bloco lia `pricesRes.arabica`, chave que a função
+        // `coffee-prices` nunca devolveu — a condição era sempre falsa e NENHUM
+        // alerta jamais disparou.
+        const precoCopa = precoDestaque(feed);
+        if (alertasRes.data && precoCopa && precoCopa > 0) {
           for (const alerta of alertasRes.data) {
-            const precoAtual = alerta.tipo_cafe === 'ARABICA' ? pricesRes.arabica.preco_saca : pricesRes.conilon.preco_saca;
+            // A tabela da Copa é de arábica; não há fonte de conilon (por isso a
+            // tela de alertas não oferece mais essa opção).
+            if (alerta.tipo_cafe !== 'ARABICA') continue;
+            const precoAtual = precoCopa;
             const disparou = alerta.condicao === 'ACIMA' ? precoAtual >= alerta.preco_alvo : precoAtual <= alerta.preco_alvo;
             if (disparou) {
               notifs.push({
                 id: `alerta-${alerta.id}`,
                 tipo: 'cotacao',
-                titulo: `${alerta.tipo_cafe === 'ARABICA' ? 'Arábica' : 'Conilon'} ${alerta.condicao === 'ACIMA' ? 'acima' : 'abaixo'} de R$ ${alerta.preco_alvo}`,
-                mensagem: `Cotação atual: R$ ${precoAtual.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}. Seu alerta foi atingido!`,
+                titulo: `Arábica ${alerta.condicao === 'ACIMA' ? 'acima' : 'abaixo'} de ${formatBRL(alerta.preco_alvo)}`,
+                mensagem: `Preço Copa Café (${feed.precos[0].bebida} cata ${feed.precos[0].cata}): ${formatBRL(precoAtual)}. Seu alerta foi atingido!`,
                 lida: alerta.disparado,
                 data: now.toISOString(),
                 icon: 'trending-up',

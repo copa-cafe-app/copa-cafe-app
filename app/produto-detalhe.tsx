@@ -1,6 +1,7 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator, Linking } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState, useEffect } from 'react';
 import { colors, spacing, fontSize, borderRadius } from '../src/constants/theme';
 import { supabase, supabasePublic } from '../src/services/supabase';
@@ -26,6 +27,7 @@ const catLabels: Record<string, string> = {
 };
 
 export default function ProdutoDetalheScreen() {
+  const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuthStore();
   const [produto, setProduto] = useState<Produto | null>(null);
@@ -225,7 +227,7 @@ export default function ProdutoDetalheScreen() {
       </ScrollView>
 
       {/* Botão fixo */}
-      <View style={styles.bottomBar}>
+      <View style={[styles.bottomBar, { paddingBottom: spacing.md + insets.bottom }]}>
         <TouchableOpacity
           style={[styles.addBtn, adding && { opacity: 0.5 }]}
           onPress={handleAddToCart}

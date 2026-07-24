@@ -1,6 +1,7 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState, useCallback } from 'react';
 import { colors, spacing, fontSize, borderRadius } from '../src/constants/theme';
 import { supabase } from '../src/services/supabase';
@@ -15,6 +16,7 @@ interface ItemCarrinho {
 }
 
 export default function CarrinhoScreen() {
+  const insets = useSafeAreaInsets();
   const { user } = useAuthStore();
   const [itens, setItens] = useState<ItemCarrinho[]>([]);
   const [pedidoId, setPedidoId] = useState<string | null>(null);
@@ -125,7 +127,7 @@ export default function CarrinhoScreen() {
           </ScrollView>
 
           {/* Footer com total e botão */}
-          <View style={styles.footer}>
+          <View style={[styles.footer, { paddingBottom: spacing.lg + insets.bottom }]}>
             <View style={styles.totalRow}>
               <Text style={styles.totalLabel}>Total</Text>
               <Text style={styles.totalValue}>

@@ -40,3 +40,7 @@ yarn-error.*
 /ios
 /android
 google-service-account.json
+
+# build artifacts baixados do EAS
+*.aab
+*.apk

@@ -1,6 +1,7 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Modal, Alert, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState, useCallback } from 'react';
 import { colors, spacing, fontSize, borderRadius } from '../src/constants/theme';
 import { supabase } from '../src/services/supabase';
@@ -37,6 +38,7 @@ const statusConfig: Record<string, { label: string; color: string; bg: string }>
 };
 
 export default function CertificacoesScreen() {
+  const insets = useSafeAreaInsets();
   const { user } = useAuthStore();
   const [certs, setCerts] = useState<Certificacao[]>([]);
   const [loading, setLoading] = useState(true);
@@ -153,7 +155,7 @@ export default function CertificacoesScreen() {
         </ScrollView>
       )}
 
-      <TouchableOpacity style={styles.fab} onPress={() => setShowModal(true)}>
+      <TouchableOpacity style={[styles.fab, { bottom: spacing.lg + insets.bottom }]} onPress={() => setShowModal(true)}>
         <Feather name="plus" size={26} color={colors.white} />
       </TouchableOpacity>
 

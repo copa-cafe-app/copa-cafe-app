@@ -66,6 +66,78 @@ export function validatePassword(senha: string): { valid: boolean; message?: str
   return { valid: true };
 }
 
+// Domínios que concentram quase todo cadastro de pessoa física no Brasil.
+// Servem pra pegar erro de digitação (ex.: "hotmail.coml"), que passa em
+// qualquer regex porque "coml" é estruturalmente um TLD válido.
+const DOMINIOS_COMUNS = [
+  'gmail.com',
+  'hotmail.com',
+  'outlook.com',
+  'yahoo.com',
+  'yahoo.com.br',
+  'icloud.com',
+  'bol.com.br',
+  'uol.com.br',
+  'terra.com.br',
+  'live.com',
+  'msn.com',
+];
+
+/**
+ * Damerau-Levenshtein (alinhamento ótimo): conta troca de letras vizinhas como
+ * UMA edição. Precisa ser Damerau e não Levenshtein puro porque transposição
+ * ("gmial.com") é o erro de digitação mais comum, e em Levenshtein ela custa 2.
+ */
+function distancia(a: string, b: string, max = 2): number {
+  if (Math.abs(a.length - b.length) > max) return max + 1;
+  const d: number[][] = Array.from({ length: a.length + 1 }, (_, i) =>
+    Array.from({ length: b.length + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0))
+  );
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      const custo = a[i - 1] === b[j - 1] ? 0 : 1;
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + custo);
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) {
+        d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1); // transposição
+      }
+    }
+    if (Math.min(...d[i]) > max) return max + 1;
+  }
+  return d[a.length][b.length];
+}
+
+// Estrutura: sem espaços, um único @, domínio com ponto e TLD de 2 a 24 letras.
+const EMAIL_RE = /^[^\s@]+@[^\s@.]+(\.[^\s@.]+)*\.[a-zA-Z]{2,24}$/;
+
+/**
+ * Valida email de verdade. Antes o app só checava `email.includes('@')`, o que
+ * deixou entrar cadastros inutilizáveis em produção (ex.: "@hotmail.coml" —
+ * o usuário nunca receberia recuperação de senha nem exportação de dados).
+ * Quando o domínio é quase um domínio conhecido, devolve a sugestão pra tela
+ * poder oferecer a correção em vez de só barrar.
+ */
+export function validateEmail(email: string): {
+  valid: boolean;
+  message?: string;
+  suggestion?: string;
+} {
+  const limpo = email.trim().toLowerCase();
+  if (!limpo) return { valid: false, message: 'Informe seu email' };
+  if (!EMAIL_RE.test(limpo)) return { valid: false, message: 'Email inválido' };
+
+  const [conta, dominio] = limpo.split('@');
+  const parecido = DOMINIOS_COMUNS.find((d) => d !== dominio && distancia(dominio, d, 1) === 1);
+  if (parecido) {
+    return {
+      valid: false,
+      message: `Você quis dizer ${conta}@${parecido}?`,
+      suggestion: `${conta}@${parecido}`,
+    };
+  }
+
+  return { valid: true };
+}
+
 export function validateCPFCNPJ(value: string): { valid: boolean; message?: string } {
   const digits = value.replace(/\D/g, '');
 

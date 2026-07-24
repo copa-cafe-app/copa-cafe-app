@@ -4,10 +4,8 @@ import { useState, useCallback } from 'react';
 import { useFocusEffect, router } from 'expo-router';
 import { colors, spacing, fontSize, borderRadius } from '../../../src/constants/theme';
 import { SUPABASE_URL, SUPABASE_ANON_KEY, WHATSAPP_NEGOCIACAO } from '../../../src/constants/config';
+import { fetchCopaPrices, type CopaCafePrice } from '../../../src/services/copaPrices.service';
 
-// Copa Café prices — same data feed used by coffeecopa.com/precos.html
-// The website renders client-side from this Google Sheets CSV; we fetch it directly.
-const COPA_CAFE_PRICES_URL = 'https://docs.google.com/spreadsheets/d/1wNX2fPobme6rAE869H8Zrv82K8eCjaDadE30DHU48tc/gviz/tq?tqx=out:csv&sheet=tabela';
 // Número do CTA vem de config (WHATSAPP_NEGOCIACAO) — trocar lá quando o número
 // dedicado existir; o atual vira sender do OTP. Ver memória project_cta_whatsapp_swap.
 const WHATSAPP_URL = `https://wa.me/${WHATSAPP_NEGOCIACAO}`;
@@ -23,57 +21,15 @@ interface MarketData {
     ultima_cotacao?: string;
   };
   bolsa: {
+    // ICE só em dólar — a conversão pra R$/saca saiu da Edge Function de
+    // propósito. Preço em reais é sempre o da Copa (copaPrices.service).
     cents_per_lb: number;
-    preco_saca_brl: number;
     variacao_percent: number;
     fonte: string;
     simbolo: string;
   };
   atualizado_em: string;
   _debug?: string[];
-}
-
-interface CopaCafePrice {
-  bebida: string;
-  cata: string;
-  preco: string;
-}
-
-function parseCSV(csv: string): string[][] {
-  const rows: string[][] = [];
-  let current = '';
-  let inQuotes = false;
-  let row: string[] = [];
-
-  for (let i = 0; i < csv.length; i++) {
-    const ch = csv[i];
-    if (ch === '"') {
-      if (inQuotes && csv[i + 1] === '"') {
-        current += '"';
-        i++;
-      } else {
-        inQuotes = !inQuotes;
-      }
-    } else if (ch === ',' && !inQuotes) {
-      row.push(current.trim());
-      current = '';
-    } else if ((ch === '\n' || ch === '\r') && !inQuotes) {
-      if (current || row.length > 0) {
-        row.push(current.trim());
-        rows.push(row);
-        row = [];
-        current = '';
-      }
-      if (ch === '\r' && csv[i + 1] === '\n') i++;
-    } else {
-      current += ch;
-    }
-  }
-  if (current || row.length > 0) {
-    row.push(current.trim());
-    rows.push(row);
-  }
-  return rows;
 }
 
 function formatBRL(value: number | null | undefined, decimals = 2): string {
@@ -123,57 +79,15 @@ export default function CotacoesScreen() {
       .finally(() => setLoading(false));
   }, []);
 
+  // Busca e parse vivem em src/services/copaPrices.service.ts — a tela de
+  // notificações usa o mesmo feed pros alertas de preço, e dois parsers
+  // separados acabariam divergindo.
   const fetchCopaCafe = useCallback(() => {
-    return fetch(COPA_CAFE_PRICES_URL)
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.text();
-      })
-      .then((csv) => {
-        const rows = parseCSV(csv);
-        const dateRow = rows[1];
-        if (dateRow && dateRow[3]) {
-          setCopaDate(dateRow[3]);
-        }
-
-        const priceRows: CopaCafePrice[] = [];
-        const notes: string[] = [];
-
-        for (let i = 2; i < rows.length; i++) {
-          const row = rows[i];
-          if (!row || row.length < 4) continue;
-          const bebida = (row[2] || '').trim();
-          const cata = (row[3] || '').trim();
-          const preco = (row[4] || '').trim();
-
-          if (!bebida) continue;
-
-          const bebidaLower = bebida.toLowerCase();
-          if (
-            bebidaLower.includes('limite') ||
-            bebidaLower.includes('pagamento') ||
-            (bebidaLower.includes('café') && !preco)
-          ) {
-            notes.push(bebida + (cata ? ` ${cata}` : '') + (preco ? ` ${preco}` : ''));
-            continue;
-          }
-
-          if (preco && preco.includes('R$') && cata.includes('20')) {
-            if (bebidaLower.includes('rio') || bebidaLower.includes('bebida') || bebidaLower.includes('duro')) {
-              priceRows.push({ bebida: bebida.trim(), cata, preco });
-            }
-          }
-        }
-
-        priceRows.sort((a, b) => {
-          const aIsDuro = a.bebida.toLowerCase().includes('duro');
-          const bIsDuro = b.bebida.toLowerCase().includes('duro');
-          if (aIsDuro && !bIsDuro) return -1;
-          if (!aIsDuro && bIsDuro) return 1;
-          return 0;
-        });
-        setCopaPrices(priceRows);
-        setCopaNotes(notes);
+    return fetchCopaPrices()
+      .then((feed) => {
+        if (feed.data) setCopaDate(feed.data);
+        setCopaPrices(feed.precos);
+        setCopaNotes(feed.notas);
       })
       .catch(() => setCopaPrices([]))
       .finally(() => setCopaLoading(false));

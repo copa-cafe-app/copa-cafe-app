@@ -5,6 +5,7 @@ import { colors, spacing, fontSize, borderRadius } from '../../src/constants/the
 import { useAuthStore } from '../../src/stores/authStore';
 import { useState } from 'react';
 import { translateAuthError } from '../../src/utils/authErrors';
+import { validateEmail } from '../../src/utils/validators';
 import { COUNTRY_CODES, DEFAULT_COUNTRY, type CountryCode } from '../../src/constants/countryCodes';
 
 type Mode = 'email' | 'sms';
@@ -27,8 +28,9 @@ export default function RecuperarSenhaScreen() {
   }
 
   async function handleSendEmail() {
-    if (!email.includes('@')) {
-      setError('Email inválido');
+    const emailCheck = validateEmail(email);
+    if (!emailCheck.valid) {
+      setError(emailCheck.message!);
       return;
     }
     setLoading(true);

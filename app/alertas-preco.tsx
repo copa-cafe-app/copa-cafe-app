@@ -1,6 +1,7 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Modal, Alert, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState, useCallback } from 'react';
 import { colors, spacing, fontSize, borderRadius } from '../src/constants/theme';
 import { supabase } from '../src/services/supabase';
@@ -16,7 +17,13 @@ interface Alerta {
   disparado: boolean;
 }
 
+// A única cotação que o app tem é a do arábica (ICE KC=F, via `coffee-prices`).
+// Não existe fonte de conilon, então oferecer a opção criava alertas que nunca
+// poderiam disparar. Voltar pra `true` no dia em que houver uma fonte de conilon.
+const CONILON_DISPONIVEL = false;
+
 export default function AlertasPrecoScreen() {
+  const insets = useSafeAreaInsets();
   const { user } = useAuthStore();
   const [alertas, setAlertas] = useState<Alerta[]>([]);
   const [loading, setLoading] = useState(true);
@@ -144,7 +151,7 @@ export default function AlertasPrecoScreen() {
         </ScrollView>
       )}
 
-      <TouchableOpacity style={styles.fab} onPress={() => setShowModal(true)}>
+      <TouchableOpacity style={[styles.fab, { bottom: spacing.lg + insets.bottom }]} onPress={() => setShowModal(true)}>
         <Feather name="plus" size={26} color={colors.white} />
       </TouchableOpacity>
 
@@ -155,21 +162,25 @@ export default function AlertasPrecoScreen() {
           <ScrollView style={styles.modalContent} keyboardShouldPersistTaps="handled">
             <Text style={styles.modalTitle}>Novo Alerta</Text>
 
-            <Text style={styles.label}>Tipo de café</Text>
-            <View style={styles.toggleRow}>
-              <TouchableOpacity
-                style={[styles.toggleBtn2, tipoCafe === 'ARABICA' && styles.toggleBtn2Active]}
-                onPress={() => setTipoCafe('ARABICA')}
-              >
-                <Text style={[styles.toggleText, tipoCafe === 'ARABICA' && styles.toggleTextActive]}>Arábica</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.toggleBtn2, tipoCafe === 'CONILON' && styles.toggleBtn2Active]}
-                onPress={() => setTipoCafe('CONILON')}
-              >
-                <Text style={[styles.toggleText, tipoCafe === 'CONILON' && styles.toggleTextActive]}>Conilon</Text>
-              </TouchableOpacity>
-            </View>
+            {CONILON_DISPONIVEL && (
+              <>
+                <Text style={styles.label}>Tipo de café</Text>
+                <View style={styles.toggleRow}>
+                  <TouchableOpacity
+                    style={[styles.toggleBtn2, tipoCafe === 'ARABICA' && styles.toggleBtn2Active]}
+                    onPress={() => setTipoCafe('ARABICA')}
+                  >
+                    <Text style={[styles.toggleText, tipoCafe === 'ARABICA' && styles.toggleTextActive]}>Arábica</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.toggleBtn2, tipoCafe === 'CONILON' && styles.toggleBtn2Active]}
+                    onPress={() => setTipoCafe('CONILON')}
+                  >
+                    <Text style={[styles.toggleText, tipoCafe === 'CONILON' && styles.toggleTextActive]}>Conilon</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
 
             <Text style={styles.label}>Condição</Text>
             <View style={styles.toggleRow}>

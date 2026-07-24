@@ -3,10 +3,10 @@ import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useState, useEffect } from 'react';
 import { colors, spacing, fontSize, borderRadius } from '../src/constants/theme';
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../src/constants/config';
 import { supabase } from '../src/services/supabase';
 import { useAuthStore } from '../src/stores/authStore';
 import { parseBRL } from '../src/utils/format';
+import { fetchCopaPrices, precoDestaque } from '../src/services/copaPrices.service';
 
 export default function SimuladorVendaScreen() {
   const { user } = useAuthStore();
@@ -18,10 +18,12 @@ export default function SimuladorVendaScreen() {
 
   useEffect(() => {
     Promise.all([
-      // Buscar cotação
-      fetch(`${SUPABASE_URL}/functions/v1/coffee-prices`, {
-        headers: { 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
-      }).then((r) => r.json()),
+      // Preço sugerido = preço da COPA (Bebida/Duro cata 20), não a bolsa. A bolsa
+      // (ICE) é só referência de mercado em dólar e não serve pra simular receita.
+      // Antes isto lia `pricesData.arabica.preco_saca` — chave que a função
+      // `coffee-prices` nunca devolveu, então a cotação ficava sempre em ZERO e a
+      // simulação só funcionava se o produtor digitasse o preço na mão.
+      fetchCopaPrices().catch(() => null),
       // Buscar custo médio
       user?.id
         ? supabase.from('despesas_producao').select('valor').eq('produtor_id', user.id)
@@ -30,10 +32,9 @@ export default function SimuladorVendaScreen() {
       user?.id
         ? supabase.from('lotes').select('quantidade_sacas').eq('produtor_id', user.id)
         : Promise.resolve({ data: [] }),
-    ]).then(([pricesData, despRes, lotesRes]) => {
-      if (pricesData.arabica) {
-        setCotacaoAtual(pricesData.arabica.preco_saca);
-      }
+    ]).then(([feed, despRes, lotesRes]) => {
+      const precoCopa = feed ? precoDestaque(feed) : null;
+      if (precoCopa) setCotacaoAtual(precoCopa);
       const totalDespesas = (despRes.data || []).reduce((sum: number, d: any) => sum + (d.valor || 0), 0);
       const totalSacas = (lotesRes.data || []).reduce((sum: number, l: any) => sum + (l.quantidade_sacas || 0), 0);
       if (totalSacas > 0) {
@@ -73,7 +74,7 @@ export default function SimuladorVendaScreen() {
       <View style={styles.cotacaoCard}>
         <Feather name="trending-up" size={20} color={colors.white} />
         <View style={{ flex: 1 }}>
-          <Text style={styles.cotacaoLabel}>Cotação Arábica (atual)</Text>
+          <Text style={styles.cotacaoLabel}>Preço Copa Café (atual)</Text>
           <Text style={styles.cotacaoValue}>
             R$ {cotacaoAtual.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} / saca
           </Text>

@@ -1,6 +1,7 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Modal, Alert, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState, useCallback } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { colors, spacing, fontSize, borderRadius } from '../src/constants/theme';
@@ -19,6 +20,7 @@ interface Talhao {
 }
 
 export default function TalhoesScreen() {
+  const insets = useSafeAreaInsets();
   const { user } = useAuthStore();
   const [talhoes, setTalhoes] = useState<Talhao[]>([]);
   const [loading, setLoading] = useState(true);
@@ -117,7 +119,7 @@ export default function TalhoesScreen() {
         </ScrollView>
       )}
 
-      <TouchableOpacity style={styles.fab} onPress={() => setShowModal(true)}>
+      <TouchableOpacity style={[styles.fab, { bottom: spacing.lg + insets.bottom }]} onPress={() => setShowModal(true)}>
         <Feather name="plus" size={26} color={colors.white} />
       </TouchableOpacity>
 

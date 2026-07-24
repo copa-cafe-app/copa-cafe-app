@@ -1,6 +1,7 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Modal, Image, Alert, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState, useCallback } from 'react';
 import { colors, spacing, fontSize, borderRadius } from '../src/constants/theme';
 import { supabase } from '../src/services/supabase';
@@ -66,6 +67,7 @@ const categoriaIcons: Record<string, string> = {
 };
 
 export default function CustosScreen() {
+  const insets = useSafeAreaInsets();
   const { user, profile } = useAuthStore();
   const [despesas, setDespesas] = useState<Despesa[]>([]);
   const [loading, setLoading] = useState(true);
@@ -240,7 +242,7 @@ export default function CustosScreen() {
         </ScrollView>
       )}
 
-      <TouchableOpacity style={styles.fab} onPress={() => router.push('/nova-despesa')}>
+      <TouchableOpacity style={[styles.fab, { bottom: spacing.lg + insets.bottom }]} onPress={() => router.push('/nova-despesa')}>
         <Feather name="plus" size={26} color={colors.white} />
       </TouchableOpacity>
 

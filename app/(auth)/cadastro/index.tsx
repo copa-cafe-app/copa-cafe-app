@@ -8,7 +8,7 @@ import { userService } from '../../../src/services/user.service';
 import WizardProgress from '../../../src/components/auth/WizardProgress';
 import { useState } from 'react';
 import { translateAuthError } from '../../../src/utils/authErrors';
-import { validatePassword } from '../../../src/utils/validators';
+import { validatePassword, validateEmail } from '../../../src/utils/validators';
 import { COUNTRY_CODES, DEFAULT_COUNTRY, type CountryCode } from '../../../src/constants/countryCodes';
 import { DEFAULT_OTP_CHANNEL } from '../../../src/constants/config';
 
@@ -19,13 +19,16 @@ export default function CadastroStep1() {
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [emailInUse, setEmailInUse] = useState(false);
+  const [emailSuggestion, setEmailSuggestion] = useState('');
   const [loading, setLoading] = useState(false);
   const [country, setCountry] = useState<CountryCode>(DEFAULT_COUNTRY);
   const [showCountryPicker, setShowCountryPicker] = useState(false);
 
   function validate() {
     const errs: Record<string, string> = {};
-    if (!email.includes('@')) errs.email = 'Email inválido';
+    const emailCheck = validateEmail(email);
+    if (!emailCheck.valid) errs.email = emailCheck.message!;
+    setEmailSuggestion(emailCheck.suggestion || '');
     const senhaCheck = validatePassword(senha);
     if (!senhaCheck.valid) errs.senha = senhaCheck.message!;
     if (senha !== confirmarSenha) errs.confirmarSenha = 'Senhas não conferem';
@@ -80,11 +83,24 @@ export default function CadastroStep1() {
             keyboardType="email-address"
             autoCapitalize="none"
             value={email}
-            onChangeText={(v) => { setField('email', v); if (emailInUse) { setEmailInUse(false); setErrors((e) => ({ ...e, email: '' })); } }}
+            onChangeText={(v) => { setField('email', v); setEmailSuggestion(''); if (emailInUse) { setEmailInUse(false); setErrors((e) => ({ ...e, email: '' })); } }}
             placeholderTextColor={colors.textLight}
           />
         </View>
         {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
+        {emailSuggestion !== '' && (
+          <TouchableOpacity
+            style={styles.loginCta}
+            onPress={() => {
+              setField('email', emailSuggestion);
+              setEmailSuggestion('');
+              setErrors((e) => ({ ...e, email: '' }));
+            }}
+          >
+            <Feather name="check" size={18} color={colors.primary} />
+            <Text style={styles.loginCtaText}>Usar {emailSuggestion}</Text>
+          </TouchableOpacity>
+        )}
         {emailInUse && (
           <TouchableOpacity style={styles.loginCta} onPress={() => router.replace('/(auth)/login')}>
             <Feather name="log-in" size={18} color={colors.primary} />

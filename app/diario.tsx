@@ -2,6 +2,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Modal, TextInput, ScrollView,
 import { Calendar, type DateData } from 'react-native-calendars';
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import { colors, spacing, fontSize, borderRadius } from '../src/constants/theme';
@@ -75,6 +76,7 @@ function todayBR(): string {
 }
 
 export default function DiarioScreen() {
+  const insets = useSafeAreaInsets();
   const { user, profile } = useAuthStore();
   const { forecast, fetchForecast } = useWeatherStore();
   const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
@@ -449,7 +451,7 @@ export default function DiarioScreen() {
       </ScrollView>
 
       {/* FAB */}
-      <TouchableOpacity style={styles.fab} onPress={openNew}>
+      <TouchableOpacity style={[styles.fab, { bottom: spacing.lg + insets.bottom }]} onPress={openNew}>
         <Feather name="plus" size={26} color={colors.white} />
       </TouchableOpacity>
 

@@ -11,7 +11,10 @@ export interface User {
 
   nome: string;
   cpf_cnpj: string;
-  email: string;
+  // Nulo em contas legadas criadas só por telefone (sem email). O banco aceita
+  // NULL de propósito: string vazia colidia no índice UNIQUE. Ver migration
+  // 20260724140000_users_email_nullable.sql.
+  email: string | null;
   telefone: string;
   avatar_url?: string;
 

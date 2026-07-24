@@ -10,6 +10,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../../src/constants/config';
 import { userService } from '../../src/services/user.service';
 import { Propriedade } from '../../src/types/user';
 import { safraAtual } from '../../src/utils/safra';
+import { fetchCopaPrices } from '../../src/services/copaPrices.service';
 
 function QuickActionButton({ icon, label, onPress }: { icon: string; label: string; onPress?: () => void }) {
   return (
@@ -39,31 +40,6 @@ function getGreeting() {
   if (hour < 12) return 'Bom dia!';
   if (hour < 18) return 'Boa tarde!';
   return 'Boa noite!';
-}
-
-// Copa Café prices — same data feed used by coffeecopa.com/precos.html
-// The website renders client-side from this Google Sheets CSV; we fetch it directly.
-const COPA_CAFE_PRICES_URL = 'https://docs.google.com/spreadsheets/d/1wNX2fPobme6rAE869H8Zrv82K8eCjaDadE30DHU48tc/gviz/tq?tqx=out:csv&sheet=tabela';
-
-function parseCSV(csv: string): string[][] {
-  const rows: string[][] = [];
-  let current = '';
-  let inQuotes = false;
-  let row: string[] = [];
-  for (let i = 0; i < csv.length; i++) {
-    const ch = csv[i];
-    if (ch === '"') {
-      if (inQuotes && csv[i + 1] === '"') { current += '"'; i++; }
-      else { inQuotes = !inQuotes; }
-    } else if (ch === ',' && !inQuotes) {
-      row.push(current.trim()); current = '';
-    } else if ((ch === '\n' || ch === '\r') && !inQuotes) {
-      if (current || row.length > 0) { row.push(current.trim()); rows.push(row); row = []; current = ''; }
-      if (ch === '\r' && csv[i + 1] === '\n') i++;
-    } else { current += ch; }
-  }
-  if (current || row.length > 0) { row.push(current.trim()); rows.push(row); }
-  return rows;
 }
 
 export default function HomeScreen() {
@@ -115,47 +91,11 @@ export default function HomeScreen() {
       .catch(() => setCotacoes(null));
   }, []);
 
+  // Mesmo feed/ordenação da tela de cotações (Duro/Bebida cata 20 primeiro) —
+  // antes esta tela tinha o próprio parser e três laços de fallback duplicados.
   const fetchCopaCafePrice = useCallback(() => {
-    fetch(COPA_CAFE_PRICES_URL)
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.text();
-      })
-      .then((csv) => {
-        const rows = parseCSV(csv);
-        for (let i = 2; i < rows.length; i++) {
-          const row = rows[i];
-          if (!row || row.length < 5) continue;
-          const tipo = (row[2] || '').trim().toLowerCase();
-          const cata = (row[3] || '').trim();
-          const preco = (row[4] || '').trim();
-          if (tipo.includes('duro') && cata.includes('20') && preco && preco.includes('R$')) {
-            setCopaCafePrice(preco);
-            return;
-          }
-        }
-        for (let i = 2; i < rows.length; i++) {
-          const row = rows[i];
-          if (!row || row.length < 5) continue;
-          const tipo = (row[2] || '').trim().toLowerCase();
-          const cata = (row[3] || '').trim();
-          const preco = (row[4] || '').trim();
-          if (!tipo.includes('rio') && cata.includes('20') && preco && preco.includes('R$')) {
-            setCopaCafePrice(preco);
-            return;
-          }
-        }
-        for (let i = 2; i < rows.length; i++) {
-          const row = rows[i];
-          if (!row || row.length < 5) continue;
-          const cata = (row[3] || '').trim();
-          const preco = (row[4] || '').trim();
-          if (cata.includes('20') && preco && preco.includes('R$')) {
-            setCopaCafePrice(preco);
-            return;
-          }
-        }
-      })
+    fetchCopaPrices()
+      .then((feed) => setCopaCafePrice(feed.precos[0]?.preco ?? null))
       .catch(() => setCopaCafePrice(null));
   }, []);
 
