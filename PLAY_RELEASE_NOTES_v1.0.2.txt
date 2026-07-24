@@ -1,6 +1,8 @@
 Notas da versão — Copa Café v1.0.2 (versionCode 5)
 Idioma: Português (Brasil) — pt-BR
 Limite do Play Console: 500 caracteres. O texto abaixo tem ~430.
+DESTINO: track de PRODUÇÃO (o app já está público para todos),
+não teste fechado. Play Console > Copa > Produção > Criar nova versão.
 ================================================================
 
 Nesta versão:
