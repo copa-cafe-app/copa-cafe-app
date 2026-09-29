@@ -39,7 +39,13 @@ function InfoRow({ icon, label, value }: { icon: string; label: string; value: s
   );
 }
 
-type Propriedade = { nome: string | null; municipio: string | null; estado: string | null };
+type Propriedade = { id: string; nome: string | null; municipio: string | null; estado: string | null };
+
+function formatDataHora(iso: string): string {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} às ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 
 export default function LoteDetalheScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -50,7 +56,7 @@ export default function LoteDetalheScreen() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [tabela, setTabela] = useState<CopaPriceTable | null>(null);
   const [tabelaStatus, setTabelaStatus] = useState<'loading' | 'ok' | 'error'>('loading');
-  const [propriedade, setPropriedade] = useState<Propriedade | null>(null);
+  const [propriedades, setPropriedades] = useState<Propriedade[]>([]);
   const [busy, setBusy] = useState(false);
 
   const carregarLote = useCallback(async () => {
@@ -99,12 +105,10 @@ export default function LoteDetalheScreen() {
       if (user?.id) {
         supabase
           .from('propriedades')
-          .select('nome, municipio, estado')
+          .select('id, nome, municipio, estado')
           .eq('produtor_id', user.id)
           .order('criado_em', { ascending: true })
-          .limit(1)
-          .maybeSingle()
-          .then(({ data }) => { if (data) setPropriedade(data as Propriedade); }, () => {});
+          .then(({ data }) => { if (data) setPropriedades(data as Propriedade[]); }, () => {});
       }
     }, [carregarLote, carregarTabela, user?.id])
   );
@@ -208,6 +212,8 @@ export default function LoteDetalheScreen() {
   async function handleOferecer() {
     if (!lote || !user?.id) return;
     const pricing = precoCopaParaLote(lote, tabela);
+    // Fazenda do lote; lotes antigos (sem vínculo) usam a primeira fazenda.
+    const propriedade = propriedades.find((p) => p.id === lote.propriedade_id) ?? propriedades[0] ?? null;
     const texto = mensagemOfertaLote(lote, pricing, {
       produtorNome: profile?.nome,
       fazendaNome: propriedade?.nome,
@@ -219,15 +225,15 @@ export default function LoteDetalheScreen() {
       Alert.alert('WhatsApp', 'Não foi possível abrir o WhatsApp. Verifique se ele está instalado e tente de novo.');
       return;
     }
-    // Ofertado à Copa → sai de Rascunho para Disponível. Outros status não mexe.
-    if (lote.status === 'RASCUNHO') {
-      const { error } = await supabase
-        .from('lotes')
-        .update({ status: 'DISPONIVEL' })
-        .eq('id', lote.id)
-        .eq('produtor_id', user.id);
-      if (!error) setLote({ ...lote, status: 'DISPONIVEL' });
-    }
+    // Registra a oferta; Rascunho → Disponível. Outros status não mexe.
+    const mudancas: Partial<Lote> = { ofertado_copa_em: new Date().toISOString() };
+    if (lote.status === 'RASCUNHO') mudancas.status = 'DISPONIVEL';
+    const { error } = await supabase
+      .from('lotes')
+      .update(mudancas)
+      .eq('id', lote.id)
+      .eq('produtor_id', user.id);
+    if (!error) setLote({ ...lote, ...mudancas });
   }
 
   if (loading) {
@@ -350,9 +356,15 @@ export default function LoteDetalheScreen() {
 
           <TouchableOpacity style={styles.ofertaBtn} onPress={handleOferecer} disabled={busy}>
             <Feather name="message-circle" size={20} color={colors.white} />
-            <Text style={styles.ofertaBtnText}>Oferecer este lote à Copa</Text>
+            <Text style={styles.ofertaBtnText}>
+              {lote.ofertado_copa_em ? 'Oferecer de novo à Copa' : 'Oferecer este lote à Copa'}
+            </Text>
           </TouchableOpacity>
-          <Text style={styles.ofertaHint}>Abre o WhatsApp da Copa com os dados do lote já escritos.</Text>
+          <Text style={styles.ofertaHint}>
+            {lote.ofertado_copa_em
+              ? `Oferecido à Copa em ${formatDataHora(lote.ofertado_copa_em)}.`
+              : 'Abre o WhatsApp da Copa com os dados do lote já escritos.'}
+          </Text>
         </View>
 
         {/* Informações */}

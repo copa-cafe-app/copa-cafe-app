@@ -23,6 +23,8 @@ export interface Lote {
   altitude_metros: number | null;
   data_colheita: string | null;
   qrcode_hash: string | null;
+  propriedade_id: string | null;
+  ofertado_copa_em: string | null;
   criado_em: string;
 }
 

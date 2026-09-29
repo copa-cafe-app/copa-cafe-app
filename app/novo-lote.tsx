@@ -87,6 +87,8 @@ export default function NovoLoteScreen() {
   const [peneira, setPeneira] = useState('');
   const [cata, setCata] = useState('');
   const [notas, setNotas] = useState('');
+  const [propriedades, setPropriedades] = useState<{ id: string; nome: string | null; municipio: string | null }[]>([]);
+  const [propriedadeId, setPropriedadeId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [loadingEdit, setLoadingEdit] = useState(isEdit);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -129,6 +131,7 @@ export default function NovoLoteScreen() {
       setPeneira(l.peneira || '');
       setCata(l.cata != null ? String(l.cata) : '');
       setNotas(l.notas_sensoriais || '');
+      if (l.propriedade_id) setPropriedadeId(l.propriedade_id);
     } catch (err) {
       setLoadError(mensagemErroLote(err, 'carregar o lote'));
     } finally {
@@ -139,6 +142,22 @@ export default function NovoLoteScreen() {
   useEffect(() => {
     carregarLote();
   }, [carregarLote]);
+
+  // Fazendas do produtor: o lote nasce ligado à primeira; o seletor só aparece
+  // com 2+ fazendas (regra de UI multi-propriedade).
+  useEffect(() => {
+    if (!user?.id) return;
+    supabase
+      .from('propriedades')
+      .select('id, nome, municipio')
+      .eq('produtor_id', user.id)
+      .order('criado_em', { ascending: true })
+      .then(({ data }) => {
+        const lista = data || [];
+        setPropriedades(lista);
+        setPropriedadeId((atual) => atual ?? lista[0]?.id ?? null);
+      }, () => {});
+  }, [user?.id]);
 
   async function handleSave() {
     if (!variedade || !processo || !sacas.trim()) {
@@ -189,6 +208,7 @@ export default function NovoLoteScreen() {
       peneira: peneira || null,
       cata: cataNum,
       notas_sensoriais: notas.trim() || null,
+      propriedade_id: propriedadeId,
     };
     setSaving(true);
     try {
@@ -257,6 +277,26 @@ export default function NovoLoteScreen() {
         <Text style={styles.headerTitle}>{isEdit ? 'Editar lote' : 'Novo Lote'}</Text>
         <View style={{ width: 40 }} />
       </View>
+
+      {/* Fazenda (só com 2+ propriedades) */}
+      {propriedades.length >= 2 && (
+        <>
+          <Text style={styles.label}>Fazenda</Text>
+          <View style={styles.safraRow}>
+            {propriedades.map((p) => (
+              <TouchableOpacity
+                key={p.id}
+                style={[styles.safraBtn, propriedadeId === p.id && styles.safraBtnActive]}
+                onPress={() => setPropriedadeId(p.id)}
+              >
+                <Text style={[styles.safraText, propriedadeId === p.id && styles.safraTextActive]}>
+                  {p.nome || p.municipio || 'Fazenda'}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </>
+      )}
 
       {/* Variedade */}
       <Text style={styles.label}>Variedade</Text>
