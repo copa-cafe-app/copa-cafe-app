@@ -135,6 +135,7 @@ export default function RootLayout() {
         <Stack.Screen name="notificacoes-config" options={{ headerShown: false }} />
         <Stack.Screen name="fale-conosco" options={{ headerShown: false }} />
         <Stack.Screen name="lote-detalhe" options={{ headerShown: false }} />
+        <Stack.Screen name="amostras" options={{ headerShown: false }} />
         <Stack.Screen name="marketplace" options={{ headerShown: false }} />
         <Stack.Screen name="produto-detalhe" options={{ headerShown: false }} />
         <Stack.Screen name="carrinho" options={{ headerShown: false }} />

@@ -17,6 +17,9 @@ import {
   mensagemErroLote,
   mensagemOfertaLote,
   abrirWhatsAppCopa,
+  amostraConfig,
+  enviarAmostra,
+  mensagemAmostraLote,
 } from '../src/services/lote.service';
 
 const statusConfig: Record<string, { label: string; color: string; bg: string }> = {
@@ -236,6 +239,44 @@ export default function LoteDetalheScreen() {
     if (!error) setLote({ ...lote, ...mudancas });
   }
 
+  function handleEnviarAmostra() {
+    if (!lote || !user?.id) return;
+    Alert.alert(
+      'Enviar amostra',
+      'Confirme depois de separar a amostra deste lote para a Copa. Vamos abrir o WhatsApp para avisar a Copa.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Confirmar envio',
+          onPress: async () => {
+            setBusy(true);
+            try {
+              const atualizado = await enviarAmostra(lote.id, user.id);
+              const novoLote = { ...lote, ...atualizado };
+              setLote(novoLote);
+              const propriedade = propriedades.find((p) => p.id === lote.propriedade_id) ?? propriedades[0] ?? null;
+              const abriu = await abrirWhatsAppCopa(
+                mensagemAmostraLote(novoLote, {
+                  produtorNome: profile?.nome,
+                  fazendaNome: propriedade?.nome,
+                  municipio: propriedade?.municipio,
+                  estado: propriedade?.estado,
+                })
+              );
+              if (!abriu) {
+                Alert.alert('Amostra registrada', 'Não conseguimos abrir o WhatsApp. Avise a Copa que a amostra foi enviada.');
+              }
+            } catch (err) {
+              Alert.alert('Erro', mensagemErroLote(err, 'registrar o envio da amostra'));
+            } finally {
+              setBusy(false);
+            }
+          },
+        },
+      ]
+    );
+  }
+
   if (loading) {
     return (
       <View style={[styles.container, styles.centered]}>
@@ -365,6 +406,48 @@ export default function LoteDetalheScreen() {
               ? `Oferecido à Copa em ${formatDataHora(lote.ofertado_copa_em)}.`
               : 'Abre o WhatsApp da Copa com os dados do lote já escritos.'}
           </Text>
+        </View>
+
+        {/* Amostra */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Amostra</Text>
+          {lote.amostra_status ? (
+            <View style={[styles.amostraCard, { backgroundColor: amostraConfig[lote.amostra_status].bg }]}>
+              <View style={styles.amostraHeader}>
+                <Feather
+                  name={amostraConfig[lote.amostra_status].icon as any}
+                  size={22}
+                  color={amostraConfig[lote.amostra_status].color}
+                />
+                <Text style={[styles.amostraTitulo, { color: amostraConfig[lote.amostra_status].color }]}>
+                  {amostraConfig[lote.amostra_status].label}
+                </Text>
+              </View>
+              {lote.amostra_status === 'ENVIADA' && lote.amostra_enviada_em && (
+                <Text style={styles.amostraTexto}>
+                  Enviada em {formatDataHora(lote.amostra_enviada_em)}. Aguardando avaliação da Copa.
+                </Text>
+              )}
+              {lote.amostra_status !== 'ENVIADA' && lote.amostra_avaliada_em && (
+                <Text style={styles.amostraTexto}>Avaliada em {formatDataHora(lote.amostra_avaliada_em)}.</Text>
+              )}
+              {lote.amostra_status === 'REPROVADA' && lote.amostra_motivo && (
+                <Text style={styles.amostraTexto}>Motivo: {lote.amostra_motivo}</Text>
+              )}
+            </View>
+          ) : (
+            <Text style={styles.amostraTexto}>
+              Envie uma amostra do lote para a Copa avaliar. O resultado aparece aqui.
+            </Text>
+          )}
+          {(!lote.amostra_status || lote.amostra_status === 'REPROVADA') && (
+            <TouchableOpacity style={styles.amostraBtn} onPress={handleEnviarAmostra} disabled={busy}>
+              <Feather name="send" size={20} color={colors.white} />
+              <Text style={styles.ofertaBtnText}>
+                {lote.amostra_status === 'REPROVADA' ? 'Enviar nova amostra' : 'Enviar amostra para aprovação'}
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Informações */}
@@ -506,6 +589,11 @@ const styles = StyleSheet.create({
   ofertaBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, backgroundColor: '#25D366', height: 56, borderRadius: borderRadius.md, marginTop: spacing.md },
   ofertaBtnText: { color: colors.white, fontSize: fontSize.md, fontWeight: '700' },
   ofertaHint: { fontSize: fontSize.xs, color: colors.textSecondary, textAlign: 'center', marginTop: spacing.xs },
+  amostraCard: { borderRadius: borderRadius.md, padding: spacing.lg, gap: spacing.xs },
+  amostraHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  amostraTitulo: { fontSize: fontSize.md, fontWeight: '700' },
+  amostraTexto: { fontSize: fontSize.sm, color: colors.textSecondary },
+  amostraBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, backgroundColor: colors.primary, height: 56, borderRadius: borderRadius.md, marginTop: spacing.md },
   infoCard: { backgroundColor: colors.surface, borderRadius: borderRadius.lg, padding: spacing.md, borderWidth: 1, borderColor: colors.border },
   infoRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, gap: spacing.sm },
   infoLabel: { fontSize: fontSize.sm, color: colors.textSecondary, width: 80 },

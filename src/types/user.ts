@@ -32,6 +32,8 @@ export interface User {
   aceite_termos: string;
   aceite_privacidade: string;
   skip_2fa?: boolean;
+  // Equipe Copa: vê "Amostras recebidas" e aprova/reprova. Só muda pelo banco.
+  is_copa_staff?: boolean;
 }
 
 export interface Propriedade {

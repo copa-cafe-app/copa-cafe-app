@@ -8,7 +8,7 @@ import { useAuthStore } from '../../../src/stores/authStore';
 import { formatBRL } from '../../../src/utils/format';
 import { fetchCopaPriceTable, type CopaPriceTable } from '../../../src/services/copaPrices.service';
 import { precoCopaParaLote } from '../../../src/utils/lotePricing';
-import { excluirLote, mensagemErroLote, processoLabels } from '../../../src/services/lote.service';
+import { amostraConfig, excluirLote, mensagemErroLote, processoLabels, type AmostraStatus } from '../../../src/services/lote.service';
 
 const FILTROS = [
   { key: 'TODOS', label: 'Todos' },
@@ -32,6 +32,7 @@ interface Lote {
   cata: number | null;
   notas_sensoriais: string | null;
   status: LoteStatus;
+  amostra_status: AmostraStatus | null;
 }
 
 const statusConfig: Record<LoteStatus, { label: string; color: string; bg: string }> = {
@@ -85,6 +86,14 @@ function LoteCard({ lote, tabela, onEdit, onDelete }: LoteCardProps) {
           </View>
         ) : null}
       </View>
+      {lote.amostra_status && (
+        <View style={[styles.amostraBadge, { backgroundColor: amostraConfig[lote.amostra_status].bg }]}>
+          <Feather name={amostraConfig[lote.amostra_status].icon as any} size={14} color={amostraConfig[lote.amostra_status].color} />
+          <Text style={[styles.badgeText, { color: amostraConfig[lote.amostra_status].color }]}>
+            {amostraConfig[lote.amostra_status].label}
+          </Text>
+        </View>
+      )}
       {pricing && (
         <View style={styles.estimativa}>
           <Text style={styles.estimativaLabel}>Estimativa Copa hoje ({pricing.linhaUsada})</Text>
@@ -246,6 +255,7 @@ const styles = StyleSheet.create({
   processo: { fontSize: fontSize.sm, color: colors.textSecondary, marginTop: 2 },
   badge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: borderRadius.full },
   badgeText: { fontSize: fontSize.xs, fontWeight: '600' },
+  amostraBadge: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 6, paddingHorizontal: 10, paddingVertical: 4, borderRadius: borderRadius.full, marginTop: spacing.sm },
   cardBottom: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
   stat: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   statText: { fontSize: fontSize.sm, color: colors.textSecondary },

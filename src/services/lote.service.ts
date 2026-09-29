@@ -25,7 +25,54 @@ export interface Lote {
   qrcode_hash: string | null;
   propriedade_id: string | null;
   ofertado_copa_em: string | null;
+  amostra_status: AmostraStatus | null;
+  amostra_enviada_em: string | null;
+  amostra_avaliada_em: string | null;
+  amostra_motivo: string | null;
   criado_em: string;
+}
+
+export type AmostraStatus = 'ENVIADA' | 'APROVADA' | 'REPROVADA';
+
+export const amostraConfig: Record<AmostraStatus, { label: string; color: string; bg: string; icon: string }> = {
+  ENVIADA: { label: 'Amostra em avaliação', color: '#E65100', bg: '#FFF3E0', icon: 'clock' },
+  APROVADA: { label: 'Amostra aprovada', color: '#2E7D32', bg: '#E8F5E9', icon: 'check-circle' },
+  REPROVADA: { label: 'Amostra reprovada', color: '#C62828', bg: '#FFEBEE', icon: 'x-circle' },
+};
+
+/**
+ * Marca a amostra do lote como enviada. O trigger lotes_guard_amostra grava a
+ * data e só aceita esse passo a partir de "sem amostra" ou "reprovada".
+ */
+export async function enviarAmostra(loteId: string, produtorId: string) {
+  const { data, error } = await supabase
+    .from('lotes')
+    .update({ amostra_status: 'ENVIADA' })
+    .eq('id', loteId)
+    .eq('produtor_id', produtorId)
+    .select('amostra_status, amostra_enviada_em, amostra_avaliada_em, amostra_motivo')
+    .single();
+  if (error) throw error;
+  return data as Pick<Lote, 'amostra_status' | 'amostra_enviada_em' | 'amostra_avaliada_em' | 'amostra_motivo'>;
+}
+
+/** Texto do WhatsApp avisando a Copa que a amostra foi enviada. */
+export function mensagemAmostraLote(lote: Lote, ctx: OfertaContexto): string {
+  const linhas: string[] = [];
+  linhas.push('Olá, Copa Café! Enviei uma amostra para avaliação.');
+  linhas.push('');
+  linhas.push(`*Lote ${codigoLote(lote)}*`);
+  if (ctx.produtorNome?.trim()) linhas.push(`Produtor: ${ctx.produtorNome.trim()}`);
+  const local = [ctx.municipio?.trim(), ctx.estado?.trim()].filter(Boolean).join('/');
+  const fazenda = [ctx.fazendaNome?.trim(), local].filter(Boolean).join(' – ');
+  if (fazenda) linhas.push(`Fazenda: ${fazenda}`);
+  linhas.push(`Safra: ${lote.safra} • ${lote.quantidade_sacas} ${lote.quantidade_sacas === 1 ? 'saca' : 'sacas'}`);
+  if (lote.bebida) linhas.push(`Bebida: ${lote.bebida}`);
+  if (lote.cata != null) linhas.push(`Cata: ${lote.cata}%`);
+  linhas.push('');
+  linhas.push('O resultado da avaliação aparece no app.');
+  linhas.push('_Enviado pelo app Copa Café_');
+  return linhas.join('\n');
 }
 
 export const processoLabels: Record<string, string> = {

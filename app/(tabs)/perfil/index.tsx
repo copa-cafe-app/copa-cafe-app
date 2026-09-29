@@ -52,6 +52,9 @@ export default function PerfilScreen() {
       {/* Menu */}
       <View style={styles.section}>
         <Text style={styles.sectionLabel}>Conta</Text>
+        {profile?.is_copa_staff && (
+          <MenuItem icon="clipboard" title="Amostras recebidas" subtitle="Equipe Copa: aprovar ou reprovar" onPress={() => router.push('/amostras')} />
+        )}
         <MenuItem icon="user" title="Dados Pessoais" subtitle="Nome, CPF, telefone" onPress={() => router.push('/perfil-dados')} />
         <MenuItem icon="map-pin" title="Propriedade" subtitle="Dados da fazenda" onPress={() => router.push('/perfil-propriedade')} />
         <MenuItem icon="award" title="Certificações" subtitle="Gerenciar certificações" onPress={() => router.push('/certificacoes')} />
