@@ -1,6 +1,6 @@
 import { supabase } from './supabase';
 import type { Atividade, AtividadeTipo } from '../types/atividade';
-import { safraAtual } from '../utils/safra';
+import { safraDaData } from '../utils/safra';
 
 // Mapeia o tipo de atividade do Diário para a categoria de despesa de produção.
 const TIPO_TO_CATEGORIA: Record<AtividadeTipo, string> = {
@@ -12,10 +12,19 @@ const TIPO_TO_CATEGORIA: Record<AtividadeTipo, string> = {
   OUTRO: 'OUTROS',
 };
 
-const SAFRA_ATUAL = safraAtual();
+// Erro ao lançar/atualizar o custo da atividade em Custos de Produção.
+// A mensagem já é amigável (PT-BR) — a tela pode mostrar err.message direto.
+export class SyncDespesaError extends Error {
+  constructor(message: string, public cause?: unknown) {
+    super(message);
+    this.name = 'SyncDespesaError';
+  }
+}
 
 // Cria/atualiza a despesa vinculada a uma atividade (origem='DIARIO').
 // Se a atividade não tem custo, remove a despesa vinculada (se houver).
+// Lança SyncDespesaError se o banco recusar (antes o erro era ignorado e o
+// custo sumia de Custos sem aviso).
 async function syncDespesa(
   atividade: Atividade,
   comprovanteUrl?: string | null,
@@ -23,7 +32,13 @@ async function syncDespesa(
   const temCusto = typeof atividade.custo === 'number' && atividade.custo > 0;
 
   if (!temCusto) {
-    await supabase.from('despesas_producao').delete().eq('atividade_id', atividade.id);
+    const { error } = await supabase.from('despesas_producao').delete().eq('atividade_id', atividade.id);
+    if (error) {
+      throw new SyncDespesaError(
+        'A atividade foi salva, mas não conseguimos remover o custo dela em Custos de Produção. Verifique sua internet e salve de novo.',
+        error,
+      );
+    }
     return;
   }
 
@@ -35,12 +50,19 @@ async function syncDespesa(
     descricao: atividade.titulo,
     valor: atividade.custo,
     data: atividade.data,
-    safra: SAFRA_ATUAL,
+    // Safra pela data da atividade, não pela data de hoje.
+    safra: safraDaData(atividade.data),
   };
   // Só sobrescreve o comprovante quando um novo é enviado (undefined = manter).
   if (comprovanteUrl !== undefined) row.comprovante_url = comprovanteUrl;
 
-  await supabase.from('despesas_producao').upsert(row, { onConflict: 'atividade_id' });
+  const { error } = await supabase.from('despesas_producao').upsert(row, { onConflict: 'atividade_id' });
+  if (error) {
+    throw new SyncDespesaError(
+      'A atividade foi salva, mas o custo não entrou em Custos de Produção. Verifique sua internet e salve de novo.',
+      error,
+    );
+  }
 }
 
 export const atividadeService = {
@@ -92,7 +114,16 @@ export const atividadeService = {
       .single();
 
     if (error) throw error;
-    await syncDespesa(data as Atividade, comprovanteUrl);
+    try {
+      await syncDespesa(data as Atividade, comprovanteUrl);
+    } catch (err) {
+      // Desfaz a atividade recém-criada para que "salvar de novo" não duplique.
+      await supabase.from('atividades_campo').delete().eq('id', (data as Atividade).id);
+      throw new SyncDespesaError(
+        'Não foi possível salvar a atividade com o custo. Verifique sua internet e tente novamente.',
+        err,
+      );
+    }
     return data;
   },
 

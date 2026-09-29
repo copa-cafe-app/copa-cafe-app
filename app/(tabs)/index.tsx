@@ -6,11 +6,13 @@ import { colors, spacing, fontSize, borderRadius } from '../../src/constants/the
 import { useWeatherStore } from '../../src/stores/weatherStore';
 import { useAuthStore } from '../../src/stores/authStore';
 import { supabase } from '../../src/services/supabase';
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../../src/constants/config';
 import { userService } from '../../src/services/user.service';
 import { Propriedade } from '../../src/types/user';
 import { safraAtual } from '../../src/utils/safra';
-import { fetchCopaPrices } from '../../src/services/copaPrices.service';
+import { fetchCopaFeed, fetchMarketData } from '../../src/services/marketFeeds';
+import { useCachedResource } from '../../src/hooks/useCachedResource';
+import { CACHE_KEYS, readCache, writeCache } from '../../src/utils/cache';
+import { OfflineNotice } from '../../src/components/prices/OfflineNotice';
 
 function QuickActionButton({ icon, label, onPress }: { icon: string; label: string; onPress?: () => void }) {
   return (
@@ -43,11 +45,24 @@ function getGreeting() {
 }
 
 export default function HomeScreen() {
-  const { weather, cityName, loading: weatherLoading, fetchWeather, fetchWeatherByCity, captureCoords } = useWeatherStore();
+  const { weather, cityName, loading: weatherLoading, weatherOfflineAt, fetchWeather, fetchWeatherByCity, captureCoords } = useWeatherStore();
   const { profile, user } = useAuthStore();
   const [safraStats, setSafraStats] = useState({ total: 0, vendidos: 0, receita: 0 });
-  const [cotacoes, setCotacoes] = useState<{ kcCentsLb: number; kcVar: number; dolar: number; dolarVar: number } | null>(null);
-  const [copaCafePrice, setCopaCafePrice] = useState<string | null>(null);
+  // Preço Copa + bolsa/dólar com cache offline (stale-while-revalidate) — mesmas
+  // chaves da aba Cotações, então o que uma tela salvou a outra já mostra.
+  const copa = useCachedResource(CACHE_KEYS.copaPrices, fetchCopaFeed);
+  const market = useCachedResource(CACHE_KEYS.market, fetchMarketData);
+  const copaCafePrice = copa.data?.precos[0]?.preco ?? null;
+  const cotacoes = useMemo(() => {
+    const d = market.data;
+    if (!d?.bolsa || !d?.cambio) return null;
+    return {
+      kcCentsLb: d.bolsa.cents_per_lb,
+      kcVar: d.bolsa.variacao_percent,
+      dolar: d.cambio.usd_brl,
+      dolarVar: d.cambio.variacao_percent,
+    };
+  }, [market.data]);
   const [refreshing, setRefreshing] = useState(false);
   const [propriedades, setPropriedades] = useState<Propriedade[]>([]);
   const [selectedPropId, setSelectedPropId] = useState<string | null>(null);
@@ -73,35 +88,12 @@ export default function HomeScreen() {
     [fetchWeatherByCity, fetchWeather, user?.id]
   );
 
-  const fetchCotacoes = useCallback(() => {
-    fetch(`${SUPABASE_URL}/functions/v1/coffee-prices`, {
-      headers: { 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.bolsa && data.cambio) {
-          setCotacoes({
-            kcCentsLb: data.bolsa.cents_per_lb,
-            kcVar: data.bolsa.variacao_percent,
-            dolar: data.cambio.usd_brl,
-            dolarVar: data.cambio.variacao_percent,
-          });
-        }
-      })
-      .catch(() => setCotacoes(null));
-  }, []);
+  const fetchCotacoes = market.refresh;
+  const fetchCopaCafePrice = copa.refresh;
 
-  // Mesmo feed/ordenação da tela de cotações (Duro/Bebida cata 20 primeiro) —
-  // antes esta tela tinha o próprio parser e três laços de fallback duplicados.
-  const fetchCopaCafePrice = useCallback(() => {
-    fetchCopaPrices()
-      .then((feed) => setCopaCafePrice(feed.precos[0]?.preco ?? null))
-      .catch(() => setCopaCafePrice(null));
-  }, []);
-
-  const fetchSafraStats = useCallback(() => {
+  const fetchSafraStats = useCallback(async () => {
     if (!user?.id) return;
-    supabase
+    await supabase
       .from('lotes')
       .select('status, quantidade_sacas, preco_por_saca')
       .eq('produtor_id', user.id)
@@ -133,32 +125,46 @@ export default function HomeScreen() {
   useEffect(() => {
     fetchCotacoes();
     fetchCopaCafePrice();
+  }, [fetchCotacoes, fetchCopaCafePrice]);
+
+  // Depende de user?.id: se o usuário ainda não estava carregado na montagem,
+  // roda de novo quando ele chega (antes ficava sem fazendas/clima da fazenda).
+  useEffect(() => {
+    if (!user?.id) return;
 
     // Solicita a localização ao usar o app e salva as coordenadas no perfil
     // (independe da fonte do clima, que segue a cidade da fazenda).
-    captureCoords(user?.id);
+    captureCoords(user.id);
 
-    if (user?.id) {
-      userService.getPropriedades(user.id).then((props) => {
-        setPropriedades(props);
-        if (props.length > 0) {
-          setSelectedPropId(props[0].id);
-          // Fetch weather by city of first property
-          if (props[0].municipio) {
-            fetchWeatherByCity(props[0].municipio, props[0].estado);
-          } else {
-            fetchWeather(user?.id);
-          }
+    const userId = user.id;
+    const propsKey = CACHE_KEYS.propriedades(userId);
+    // Fazendas também vão pro cache: sem internet o clima continua sendo o da
+    // cidade da fazenda (do cache), e não cai pro GPS.
+    userService.getPropriedades(userId)
+      .then((props) => { writeCache(propsKey, props); return props; })
+      .catch(async (err) => {
+        const cached = await readCache<Propriedade[]>(propsKey);
+        if (cached?.data) return cached.data;
+        throw err;
+      })
+      .then((props) => {
+      setPropriedades(props);
+      if (props.length > 0) {
+        setSelectedPropId(props[0].id);
+        // Fetch weather by city of first property
+        if (props[0].municipio) {
+          fetchWeatherByCity(props[0].municipio, props[0].estado);
         } else {
-          fetchWeather(user?.id);
+          fetchWeather(userId);
         }
-      }).catch(() => {
-        fetchWeather(user?.id);
-      });
-    } else {
-      fetchWeather(user?.id);
-    }
-  }, []);
+      } else {
+        fetchWeather(userId);
+      }
+    }).catch(() => {
+      fetchWeather(userId);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   useFocusEffect(
     useCallback(() => {
@@ -226,6 +232,7 @@ export default function HomeScreen() {
         onPress={() => router.push('/(tabs)/cotacoes')}
       >
         <InfoCard title="Cotação do Dia" icon="trending-up">
+          {copa.offline && copa.data ? <OfflineNotice what="preços" savedAt={copa.savedAt} /> : null}
           {/* Copa Café - destaque principal */}
           <View style={styles.copaCafeMain}>
             <View style={styles.copaCafeIconCircle}>
@@ -236,7 +243,7 @@ export default function HomeScreen() {
               <Text style={styles.copaCafeSubLabel}>Bebida (Duro) · Compra</Text>
             </View>
             <Text style={styles.copaCafeValue}>
-              {copaCafePrice || '...'}
+              {copaCafePrice || (copa.failed ? '--' : '...')}
             </Text>
           </View>
 
@@ -274,6 +281,8 @@ export default function HomeScreen() {
               <Text style={styles.climaLoadingText}>Buscando clima...</Text>
             </View>
           ) : weather ? (
+            <>
+            {weatherOfflineAt ? <OfflineNotice what="clima" savedAt={weatherOfflineAt} /> : null}
             <View style={styles.climaRow}>
               <Text style={styles.climaTemp}>{weather.temperature}°C</Text>
               <View style={styles.climaDetails}>
@@ -282,6 +291,7 @@ export default function HomeScreen() {
                 <Text style={styles.climaDetail}>Vento: {weather.windSpeed} km/h</Text>
               </View>
             </View>
+            </>
           ) : (
             <TouchableOpacity onPress={() => fetchWeatherForProp(selectedProp)}>
               <Text style={styles.climaDetail}>Toque para carregar o clima</Text>

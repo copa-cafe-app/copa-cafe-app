@@ -110,7 +110,7 @@ export default function CertificacoesScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} accessibilityRole="button" accessibilityLabel="Voltar">
           <Feather name="arrow-left" size={22} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Certificações</Text>
@@ -120,7 +120,7 @@ export default function CertificacoesScreen() {
       {loading ? (
         <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 80 }} />
       ) : (
-        <ScrollView contentContainerStyle={styles.list}>
+        <ScrollView contentContainerStyle={[styles.list, { paddingBottom: 100 + insets.bottom }]}>
           {certs.length === 0 ? (
             <View style={styles.empty}>
               <Feather name="award" size={48} color={colors.textLight} />
@@ -155,14 +155,14 @@ export default function CertificacoesScreen() {
         </ScrollView>
       )}
 
-      <TouchableOpacity style={[styles.fab, { bottom: spacing.lg + insets.bottom }]} onPress={() => setShowModal(true)}>
+      <TouchableOpacity style={[styles.fab, { bottom: spacing.lg + insets.bottom }]} onPress={() => setShowModal(true)} accessibilityRole="button" accessibilityLabel="Nova certificação">
         <Feather name="plus" size={26} color={colors.white} />
       </TouchableOpacity>
 
       <Modal visible={showModal} transparent animationType="slide">
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View style={styles.modalOverlay}>
-          <ScrollView style={styles.modalContent} keyboardShouldPersistTaps="handled">
+          <ScrollView style={styles.modalContent} contentContainerStyle={{ paddingBottom: insets.bottom }} keyboardShouldPersistTaps="handled">
             <Text style={styles.modalTitle}>Nova Certificação</Text>
 
             <Text style={styles.label}>Tipo de certificação</Text>

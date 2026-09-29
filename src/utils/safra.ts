@@ -28,3 +28,18 @@ export function safrasSelecao(date: Date = new Date()): string[] {
   const inicio = parseInt(safraAtual(date).split('/')[0], 10);
   return [inicio + 1, inicio, inicio - 1].map(fmtSafra);
 }
+
+/**
+ * Safra a que pertence uma data (Date ou ISO "AAAA-MM-DD"). Usado p/ gravar a
+ * safra de uma despesa pela data dela, não pela data de hoje. A string ISO é
+ * lida como data local (evita o fuso jogar 01/07 para 30/06).
+ */
+export function safraDaData(date: Date | string): string {
+  if (typeof date === 'string') {
+    const m = date.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m) return safraAtual(new Date(+m[1], +m[2] - 1, +m[3]));
+    const d = new Date(date);
+    return safraAtual(Number.isNaN(d.getTime()) ? new Date() : d);
+  }
+  return safraAtual(date);
+}

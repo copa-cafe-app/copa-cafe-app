@@ -2,13 +2,14 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator
 import { Feather } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { colors, spacing, fontSize, borderRadius } from '../src/constants/theme';
 import { supabase } from '../src/services/supabase';
 import { useAuthStore } from '../src/stores/authStore';
 import { exportDespesasPDF } from '../src/utils/exportDespesas';
 import { formatBRL } from '../src/utils/format';
-import { safraAtual } from '../src/utils/safra';
+import { safraAtual, safrasRecentes, safraDaData } from '../src/utils/safra';
+import { despesaService, mensagemErroAmigavel } from '../src/services/despesa.service';
 
 interface Despesa {
   id: string;
@@ -20,6 +21,25 @@ interface Despesa {
   comprovante_url: string | null;
   vendor: string | null;
   origem?: string | null;
+  atividade_id?: string | null;
+}
+
+interface LoteSacas {
+  safra: string;
+  quantidade_sacas: number;
+}
+
+const SAFRAS = safrasRecentes(3);
+
+// Safra da despesa: a gravada no banco; se vazia, deriva da data.
+const safraDaDespesa = (d: Despesa) => d.safra || safraDaData(d.data);
+
+function totalPorSafra(despesas: Despesa[], safra: string): number {
+  return despesas.filter((d) => safraDaDespesa(d) === safra).reduce((s, d) => s + (Number(d.valor) || 0), 0);
+}
+
+function sacasPorSafra(lotes: LoteSacas[], safra: string): number {
+  return lotes.filter((l) => l.safra === safra).reduce((s, l) => s + (Number(l.quantidade_sacas) || 0), 0);
 }
 
 function formatDateInput(text: string): string {
@@ -77,6 +97,11 @@ export default function CustosScreen() {
   const [showPeriodModal, setShowPeriodModal] = useState(false);
   const [periodStart, setPeriodStart] = useState(firstDayOfMonthBR());
   const [periodEnd, setPeriodEnd] = useState(todayBR());
+  const [lotes, setLotes] = useState<LoteSacas[]>([]);
+  const [safraSel, setSafraSel] = useState(SAFRAS[0]);
+  const safraEscolhida = useRef(false); // usuário tocou num chip de safra
+  const [loadError, setLoadError] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   async function exportFiltered(filtered: Despesa[], label: string) {
     if (!profile?.cpf_cnpj) {
@@ -91,7 +116,7 @@ export default function CustosScreen() {
     try {
       await exportDespesasPDF(profile, filtered, label);
     } catch (err: any) {
-      Alert.alert('Erro', err.message || 'Não foi possível gerar o PDF');
+      Alert.alert('Erro', mensagemErroAmigavel(err, 'Não foi possível gerar o PDF. Tente novamente.'));
     } finally {
       setExporting(false);
     }
@@ -126,7 +151,7 @@ export default function CustosScreen() {
       filtered = despesas.filter((d) => d.data.startsWith(String(ano)));
       label = `Ano ${ano}`;
     } else if (periodo === 'safra') {
-      filtered = despesas.filter((d) => d.safra === safraAtual());
+      filtered = despesas.filter((d) => safraDaDespesa(d) === safraAtual());
       label = `Safra ${safraAtual()}`;
     }
     if (filtered.length === 0) {
@@ -137,29 +162,102 @@ export default function CustosScreen() {
     try {
       await exportDespesasPDF(profile, filtered, label);
     } catch (err: any) {
-      Alert.alert('Erro', err.message || 'Não foi possível gerar o PDF');
+      Alert.alert('Erro', mensagemErroAmigavel(err, 'Não foi possível gerar o PDF. Tente novamente.'));
     } finally {
       setExporting(false);
     }
   }
 
+  // Recarrega ao voltar pra tela (inclui volta da edição em nova-despesa).
   useFocusEffect(
     useCallback(() => {
       if (!user?.id) return;
+      let cancel = false;
       setLoading(true);
-      supabase
-        .from('despesas_producao')
-        .select('*')
-        .eq('produtor_id', user.id)
-        .order('data', { ascending: false })
-        .then(({ data, error }) => {
-          if (!error && data) setDespesas(data as Despesa[]);
-          setLoading(false);
-        });
-    }, [user?.id])
+      setLoadError(false);
+      Promise.all([
+        supabase
+          .from('despesas_producao')
+          .select('*')
+          .eq('produtor_id', user.id)
+          .order('data', { ascending: false }),
+        supabase
+          .from('lotes')
+          .select('safra, quantidade_sacas')
+          .eq('produtor_id', user.id),
+      ])
+        .then(([despRes, lotesRes]) => {
+          if (cancel) return;
+          if (despRes.error) setLoadError(true);
+          else if (despRes.data) setDespesas(despRes.data as Despesa[]);
+          if (!lotesRes.error && lotesRes.data) {
+            const ls = lotesRes.data as LoteSacas[];
+            setLotes(ls);
+            // Se a safra corrente ainda não tem lotes, mostra a mais recente que tem.
+            if (!safraEscolhida.current && sacasPorSafra(ls, SAFRAS[0]) === 0) {
+              const comSacas = SAFRAS.find((s) => sacasPorSafra(ls, s) > 0);
+              if (comSacas) setSafraSel(comSacas);
+            }
+          }
+        })
+        .catch(() => { if (!cancel) setLoadError(true); })
+        .finally(() => { if (!cancel) setLoading(false); });
+      return () => { cancel = true; };
+    }, [user?.id, reloadKey])
   );
 
-  const totalDespesas = despesas.reduce((sum, d) => sum + d.valor, 0);
+  function abrirDiarioAlert(titulo: string, msg: string) {
+    Alert.alert(titulo, msg, [
+      { text: 'Fechar', style: 'cancel' },
+      { text: 'Abrir Diário', onPress: () => router.push('/diario') },
+    ]);
+  }
+
+  function handleEditar(d: Despesa) {
+    if (d.atividade_id) {
+      abrirDiarioAlert(
+        'Despesa do Diário de Campo',
+        'Esta despesa veio do Diário de Campo — edite pela atividade no Diário.',
+      );
+      return;
+    }
+    router.push({ pathname: '/nova-despesa', params: { id: d.id } });
+  }
+
+  function handleExcluir(d: Despesa) {
+    if (d.atividade_id) {
+      abrirDiarioAlert(
+        'Excluir despesa?',
+        'Esta despesa veio do Diário de Campo. Para excluí-la, abra a atividade no Diário e apague a atividade ou remova o custo dela.',
+      );
+      return;
+    }
+    Alert.alert(
+      'Excluir despesa?',
+      `"${d.descricao}" (${formatBRL(d.valor)}) será apagada. Isso não pode ser desfeito.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Excluir',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await despesaService.remove(d.id);
+              setDespesas((prev) => prev.filter((x) => x.id !== d.id));
+            } catch (err) {
+              Alert.alert('Erro', mensagemErroAmigavel(err, 'Não foi possível excluir a despesa. Tente novamente.'));
+            }
+          },
+        },
+      ],
+    );
+  }
+
+  const totalDespesas = despesas.reduce((sum, d) => sum + (Number(d.valor) || 0), 0);
+  // Custo/saca da safra escolhida = despesas da safra / sacas dos lotes da mesma safra.
+  const totalSafra = totalPorSafra(despesas, safraSel);
+  const sacasSafra = sacasPorSafra(lotes, safraSel);
+  const custoPorSaca = sacasSafra > 0 ? totalSafra / sacasSafra : null;
 
   return (
     <View style={styles.container}>
@@ -180,22 +278,51 @@ export default function CustosScreen() {
       {loading ? (
         <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 80 }} />
       ) : (
-        <ScrollView contentContainerStyle={styles.content}>
+        <ScrollView contentContainerStyle={[styles.content, { paddingBottom: 100 + insets.bottom }]}>
+          {loadError && (
+            <TouchableOpacity style={styles.errorBox} onPress={() => setReloadKey((k) => k + 1)}>
+              <Feather name="wifi-off" size={16} color={colors.error} />
+              <Text style={styles.errorText}>Não foi possível carregar suas despesas. Toque para tentar de novo.</Text>
+            </TouchableOpacity>
+          )}
+
           {/* Resumo */}
           <View style={styles.resumoCard}>
-            <Text style={styles.resumoLabel}>Total geral</Text>
+            <Text style={styles.resumoLabel}>Total geral ({despesas.length} {despesas.length === 1 ? 'despesa' : 'despesas'})</Text>
             <Text style={styles.resumoValor}>{formatBRL(totalDespesas)}</Text>
+
+            <View style={styles.safraRow}>
+              {SAFRAS.map((s) => (
+                <TouchableOpacity
+                  key={s}
+                  style={[styles.safraChip, safraSel === s && styles.safraChipActive]}
+                  onPress={() => { safraEscolhida.current = true; setSafraSel(s); }}
+                >
+                  <Text style={[styles.safraChipText, safraSel === s && styles.safraChipTextActive]}>{s}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
             <View style={styles.resumoRow}>
               <View style={styles.resumoItem}>
-                <Text style={styles.resumoItemLabel}>Custo/saca (est.)</Text>
-                <Text style={styles.resumoItemValor}>R$ {despesas.length > 0 ? (totalDespesas / 120).toFixed(0) : '0'}</Text>
+                <Text style={styles.resumoItemLabel}>Custos safra {safraSel}</Text>
+                <Text style={styles.resumoItemValor}>{formatBRL(totalSafra)}</Text>
               </View>
               <View style={styles.resumoDivider} />
               <View style={styles.resumoItem}>
-                <Text style={styles.resumoItemLabel}>Despesas</Text>
-                <Text style={styles.resumoItemValor}>{despesas.length}</Text>
+                <Text style={styles.resumoItemLabel}>Custo por saca</Text>
+                <Text style={styles.resumoItemValor}>{custoPorSaca != null ? formatBRL(custoPorSaca) : '—'}</Text>
               </View>
             </View>
+            {custoPorSaca == null ? (
+              <TouchableOpacity onPress={() => router.push('/novo-lote')}>
+                <Text style={styles.resumoHint}>Cadastre seus lotes da safra {safraSel} para ver o custo por saca</Text>
+              </TouchableOpacity>
+            ) : (
+              <Text style={styles.resumoHint}>
+                {sacasSafra.toLocaleString('pt-BR')} sacas nos seus lotes da safra {safraSel}
+              </Text>
+            )}
           </View>
 
           {despesas.length === 0 ? (
@@ -207,8 +334,9 @@ export default function CustosScreen() {
           ) : (
             <>
               <Text style={styles.sectionTitle}>Despesas recentes</Text>
+              <Text style={styles.sectionHint}>Toque numa despesa para editar</Text>
               {despesas.map((d) => (
-                <View key={d.id} style={styles.despesaCard}>
+                <TouchableOpacity key={d.id} style={styles.despesaCard} onPress={() => handleEditar(d)} activeOpacity={0.7}>
                   <View style={styles.despesaIcon}>
                     <Feather name={(categoriaIcons[d.categoria] || 'dollar-sign') as any} size={18} color={colors.primary} />
                   </View>
@@ -235,7 +363,15 @@ export default function CustosScreen() {
                       <Feather name="file-text" size={16} color={colors.primary} />
                     </TouchableOpacity>
                   ) : null}
-                </View>
+                  <TouchableOpacity
+                    style={styles.deleteBtn}
+                    onPress={() => handleExcluir(d)}
+                    hitSlop={{ top: 8, bottom: 8, left: 4, right: 8 }}
+                    accessibilityLabel="Excluir despesa"
+                  >
+                    <Feather name="trash-2" size={16} color={colors.error} />
+                  </TouchableOpacity>
+                </TouchableOpacity>
               ))}
             </>
           )}
@@ -249,7 +385,7 @@ export default function CustosScreen() {
       {/* Modal de opções de export */}
       <Modal visible={showExportModal} transparent animationType="fade" onRequestClose={() => setShowExportModal(false)}>
         <TouchableOpacity style={styles.exportOverlay} activeOpacity={1} onPress={() => setShowExportModal(false)}>
-          <View style={styles.exportContent}>
+          <View style={[styles.exportContent, { paddingBottom: spacing.xxl + insets.bottom }]}>
             <Text style={styles.exportTitle}>Exportar Relatório PDF</Text>
             <Text style={styles.exportSubtitle}>Selecione o período</Text>
 
@@ -299,7 +435,7 @@ export default function CustosScreen() {
       <Modal visible={showPeriodModal} transparent animationType="slide" onRequestClose={() => setShowPeriodModal(false)}>
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View style={styles.exportOverlay}>
-          <View style={styles.exportContent}>
+          <View style={[styles.exportContent, { paddingBottom: spacing.xxl + insets.bottom }]}>
             <Text style={styles.exportTitle}>Relatório por Período</Text>
             <Text style={styles.exportSubtitle}>Escolha o intervalo de datas</Text>
 
@@ -377,6 +513,16 @@ const styles = StyleSheet.create({
   resumoItemLabel: { fontSize: fontSize.xs, color: 'rgba(255,255,255,0.7)' },
   resumoItemValor: { fontSize: fontSize.lg, fontWeight: '700', color: colors.white, marginTop: 2 },
   resumoDivider: { width: 1, backgroundColor: 'rgba(255,255,255,0.2)' },
+  resumoHint: { fontSize: fontSize.xs, color: 'rgba(255,255,255,0.8)', textAlign: 'center', marginTop: spacing.sm },
+  safraRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.md },
+  safraChip: { paddingHorizontal: spacing.md, paddingVertical: 6, borderRadius: borderRadius.full, backgroundColor: 'rgba(255,255,255,0.15)' },
+  safraChipActive: { backgroundColor: colors.white },
+  safraChipText: { fontSize: fontSize.sm, fontWeight: '600', color: colors.white },
+  safraChipTextActive: { color: colors.primary },
+  errorBox: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, padding: spacing.md, borderRadius: borderRadius.md, borderWidth: 1, borderColor: colors.error, backgroundColor: colors.surface, marginBottom: spacing.md },
+  errorText: { flex: 1, fontSize: fontSize.sm, color: colors.error },
+  sectionHint: { fontSize: fontSize.xs, color: colors.textLight, marginTop: -spacing.sm, marginBottom: spacing.sm },
+  deleteBtn: { width: 36, height: 36, borderRadius: borderRadius.sm, backgroundColor: colors.surfaceVariant, alignItems: 'center', justifyContent: 'center', marginLeft: spacing.sm },
   empty: { alignItems: 'center', marginTop: 40 },
   emptyText: { fontSize: fontSize.lg, fontWeight: '600', color: colors.textSecondary, marginTop: spacing.md },
   emptySubtext: { fontSize: fontSize.sm, color: colors.textLight, marginTop: spacing.xs },

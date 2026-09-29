@@ -1,28 +1,23 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator, Share } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { router, useLocalSearchParams } from 'expo-router';
-import { useState, useEffect } from 'react';
+import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
+import { useState, useCallback } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing, fontSize, borderRadius } from '../src/constants/theme';
 import { supabase } from '../src/services/supabase';
-
-interface Lote {
-  id: string;
-  variedade: string;
-  processo: string;
-  safra: string;
-  peneira: string | null;
-  quantidade_sacas: number;
-  preco_por_saca: number | null;
-  preco_negociavel: boolean;
-  bebida: string | null;
-  cata: number | null;
-  notas_sensoriais: string | null;
-  status: string;
-  altitude_metros: number | null;
-  data_colheita: string | null;
-  qrcode_hash: string | null;
-  criado_em: string;
-}
+import { useAuthStore } from '../src/stores/authStore';
+import { formatBRL } from '../src/utils/format';
+import { fetchCopaPriceTable, type CopaPriceTable } from '../src/services/copaPrices.service';
+import { precoCopaParaLote, motivoSemPrecoCopa } from '../src/utils/lotePricing';
+import {
+  type Lote,
+  processoLabels,
+  codigoLote,
+  excluirLote,
+  mensagemErroLote,
+  mensagemOfertaLote,
+  abrirWhatsAppCopa,
+} from '../src/services/lote.service';
 
 const statusConfig: Record<string, { label: string; color: string; bg: string }> = {
   RASCUNHO: { label: 'Rascunho', color: '#666', bg: '#E8E8E8' },
@@ -34,11 +29,6 @@ const statusConfig: Record<string, { label: string; color: string; bg: string }>
 
 const STATUS_FLOW = ['RASCUNHO', 'DISPONIVEL', 'EM_NEGOCIACAO', 'VENDIDO', 'ENCERRADO'];
 
-const processoLabels: Record<string, string> = {
-  NATURAL: 'Natural', LAVADO: 'Lavado', HONEY: 'Honey',
-  DESCASCADO: 'Descascado', CEREJA_DESCASCADO: 'Cereja Descascado', OUTRO: 'Outro',
-};
-
 function InfoRow({ icon, label, value }: { icon: string; label: string; value: string }) {
   return (
     <View style={styles.infoRow}>
@@ -49,31 +39,91 @@ function InfoRow({ icon, label, value }: { icon: string; label: string; value: s
   );
 }
 
+type Propriedade = { nome: string | null; municipio: string | null; estado: string | null };
+
 export default function LoteDetalheScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { user, profile } = useAuthStore();
+  const insets = useSafeAreaInsets();
   const [lote, setLote] = useState<Lote | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [tabela, setTabela] = useState<CopaPriceTable | null>(null);
+  const [tabelaStatus, setTabelaStatus] = useState<'loading' | 'ok' | 'error'>('loading');
+  const [propriedade, setPropriedade] = useState<Propriedade | null>(null);
+  const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
-    if (!id) return;
-    supabase.from('lotes').select('*').eq('id', id).single()
-      .then(({ data }) => {
-        if (data) setLote(data as Lote);
-        setLoading(false);
-      });
-  }, [id]);
+  const carregarLote = useCallback(async () => {
+    if (!id || !user?.id) {
+      setLoading(false);
+      setLoadError('Lote não encontrado.');
+      return;
+    }
+    setLoadError(null);
+    try {
+      const { data, error } = await supabase
+        .from('lotes')
+        .select('*')
+        .eq('id', id)
+        .eq('produtor_id', user.id) // defesa em profundidade além da RLS
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) {
+        setLote(null);
+        setLoadError('Lote não encontrado. Ele pode ter sido excluído.');
+      } else {
+        setLote(data as Lote);
+      }
+    } catch (err) {
+      setLoadError(mensagemErroLote(err, 'carregar o lote'));
+    } finally {
+      setLoading(false);
+    }
+  }, [id, user?.id]);
+
+  const carregarTabela = useCallback(async (force = false) => {
+    setTabelaStatus('loading');
+    try {
+      setTabela(await fetchCopaPriceTable({ force }));
+      setTabelaStatus('ok');
+    } catch {
+      setTabelaStatus('error');
+    }
+  }, []);
+
+  // Recarrega ao voltar da tela de edição.
+  useFocusEffect(
+    useCallback(() => {
+      carregarLote();
+      carregarTabela();
+      if (user?.id) {
+        supabase
+          .from('propriedades')
+          .select('nome, municipio, estado')
+          .eq('produtor_id', user.id)
+          .order('criado_em', { ascending: true })
+          .limit(1)
+          .maybeSingle()
+          .then(({ data }) => { if (data) setPropriedade(data as Propriedade); }, () => {});
+      }
+    }, [carregarLote, carregarTabela, user?.id])
+  );
 
   async function handleStatusChange(newStatus: string) {
-    if (!lote) return;
+    if (!lote || !user?.id) return;
     const statusLabel = statusConfig[newStatus]?.label || newStatus;
     Alert.alert('Alterar Status', `Mudar para "${statusLabel}"?`, [
       { text: 'Cancelar', style: 'cancel' },
       {
         text: 'Confirmar',
         onPress: async () => {
-          const { error } = await supabase.from('lotes').update({ status: newStatus }).eq('id', lote.id);
+          const { error } = await supabase
+            .from('lotes')
+            .update({ status: newStatus })
+            .eq('id', lote.id)
+            .eq('produtor_id', user.id);
           if (!error) setLote({ ...lote, status: newStatus });
-          else Alert.alert('Erro', 'Não foi possível alterar o status');
+          else Alert.alert('Erro', mensagemErroLote(error, 'alterar o status'));
         },
       },
     ]);
@@ -82,10 +132,10 @@ export default function LoteDetalheScreen() {
   async function handleShare() {
     if (!lote) return;
     const precoText = lote.preco_por_saca
-      ? `R$ ${lote.preco_por_saca.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}/saca`
+      ? `${formatBRL(lote.preco_por_saca)}/saca`
       : 'Preço a combinar';
     const bebidaText = lote.bebida ? `\nBebida: ${lote.bebida}` : '';
-    const cataText = lote.cata != null ? `\nCata: ${lote.cata} defeitos` : '';
+    const cataText = lote.cata != null ? `\nCata: ${lote.cata}%` : '';
     const notasText = lote.notas_sensoriais ? `\nNotas: ${lote.notas_sensoriais}` : '';
 
     const message = `☕ *Lote de Café — Copa Café*\n\n` +
@@ -95,46 +145,134 @@ export default function LoteDetalheScreen() {
       `Quantidade: ${lote.quantidade_sacas} sacas\n` +
       `Preço: ${precoText}${bebidaText}${cataText}${notasText}\n` +
       `${lote.preco_negociavel ? '💬 Preço negociável' : ''}\n\n` +
-      `Rastreabilidade: ${lote.qrcode_hash || lote.id.substring(0, 8)}`;
+      `Rastreabilidade: ${codigoLote(lote)}`;
 
     try {
       await Share.share({ message });
-    } catch {}
-  }
-
-  async function handleGenerateQR() {
-    if (!lote) return;
-    if (lote.qrcode_hash) return;
-    const hash = `CC-${lote.id.substring(0, 8).toUpperCase()}-${Date.now().toString(36).toUpperCase()}`;
-    const { error } = await supabase.from('lotes').update({ qrcode_hash: hash }).eq('id', lote.id);
-    if (!error) {
-      setLote({ ...lote, qrcode_hash: hash });
-      Alert.alert('QR Code Gerado', `Código: ${hash}`);
+    } catch {
+      Alert.alert('Compartilhar', 'Não foi possível abrir o compartilhamento. Tente de novo.');
     }
   }
 
-  if (loading || !lote) {
+  async function handleGenerateQR() {
+    if (!lote || !user?.id || lote.qrcode_hash) return;
+    const hash = `CC-${lote.id.substring(0, 8).toUpperCase()}-${Date.now().toString(36).toUpperCase()}`;
+    setBusy(true);
+    try {
+      const { error } = await supabase
+        .from('lotes')
+        .update({ qrcode_hash: hash })
+        .eq('id', lote.id)
+        .eq('produtor_id', user.id);
+      if (error) throw error;
+      setLote({ ...lote, qrcode_hash: hash });
+      Alert.alert('QR Code Gerado', `Código: ${hash}`);
+    } catch (err) {
+      Alert.alert('Erro', mensagemErroLote(err, 'gerar o código'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function handleEdit() {
+    if (!lote) return;
+    router.push({ pathname: '/novo-lote', params: { id: lote.id } });
+  }
+
+  function handleDelete() {
+    if (!lote || !user?.id) return;
+    Alert.alert(
+      'Excluir lote',
+      `Excluir o lote ${lote.variedade} (${lote.quantidade_sacas} sacas)? Essa ação não pode ser desfeita.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Excluir',
+          style: 'destructive',
+          onPress: async () => {
+            setBusy(true);
+            try {
+              await excluirLote(lote.id, user.id);
+              router.back();
+            } catch (err) {
+              Alert.alert('Erro', mensagemErroLote(err, 'excluir o lote'));
+            } finally {
+              setBusy(false);
+            }
+          },
+        },
+      ]
+    );
+  }
+
+  async function handleOferecer() {
+    if (!lote || !user?.id) return;
+    const pricing = precoCopaParaLote(lote, tabela);
+    const texto = mensagemOfertaLote(lote, pricing, {
+      produtorNome: profile?.nome,
+      fazendaNome: propriedade?.nome,
+      municipio: propriedade?.municipio,
+      estado: propriedade?.estado,
+    });
+    const abriu = await abrirWhatsAppCopa(texto);
+    if (!abriu) {
+      Alert.alert('WhatsApp', 'Não foi possível abrir o WhatsApp. Verifique se ele está instalado e tente de novo.');
+      return;
+    }
+    // Ofertado à Copa → sai de Rascunho para Disponível. Outros status não mexe.
+    if (lote.status === 'RASCUNHO') {
+      const { error } = await supabase
+        .from('lotes')
+        .update({ status: 'DISPONIVEL' })
+        .eq('id', lote.id)
+        .eq('produtor_id', user.id);
+      if (!error) setLote({ ...lote, status: 'DISPONIVEL' });
+    }
+  }
+
+  if (loading) {
     return (
-      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+      <View style={[styles.container, styles.centered]}>
         <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
+  if (!lote) {
+    return (
+      <View style={[styles.container, styles.centered]}>
+        <Feather name="alert-circle" size={40} color={colors.textLight} />
+        <Text style={styles.errorText}>{loadError || 'Lote não encontrado.'}</Text>
+        <TouchableOpacity style={styles.retryBtn} onPress={() => { setLoading(true); carregarLote(); }}>
+          <Text style={styles.retryBtnText}>Tentar de novo</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.backLink} onPress={() => router.back()}>
+          <Text style={styles.backLinkText}>Voltar</Text>
+        </TouchableOpacity>
       </View>
     );
   }
 
   const status = statusConfig[lote.status] || statusConfig.RASCUNHO;
   const currentIdx = STATUS_FLOW.indexOf(lote.status);
+  const pricing = precoCopaParaLote(lote, tabela);
 
   return (
     <View style={styles.container}>
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: spacing.xxl + insets.bottom }]}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
             <Feather name="arrow-left" size={22} color={colors.text} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Lote</Text>
-          <TouchableOpacity onPress={handleShare}>
-            <Feather name="share-2" size={20} color={colors.primary} />
-          </TouchableOpacity>
+          <View style={styles.headerActions}>
+            <TouchableOpacity onPress={handleEdit} style={styles.backBtn} accessibilityLabel="Editar lote">
+              <Feather name="edit-2" size={20} color={colors.primary} />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={handleShare} style={styles.backBtn} accessibilityLabel="Compartilhar lote">
+              <Feather name="share-2" size={20} color={colors.primary} />
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Status badge */}
@@ -151,38 +289,90 @@ export default function LoteDetalheScreen() {
         <View style={styles.precoCard}>
           {lote.preco_por_saca ? (
             <>
-              <Text style={styles.precoValue}>
-                R$ {lote.preco_por_saca.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-              </Text>
+              <Text style={styles.precoValue}>{formatBRL(lote.preco_por_saca)}</Text>
               <Text style={styles.precoUnit}>/saca</Text>
             </>
           ) : (
             <Text style={styles.precoNegociar}>Aceito propostas</Text>
           )}
-          {lote.preco_negociavel && lote.preco_por_saca && (
+          {lote.preco_negociavel && lote.preco_por_saca ? (
             <View style={styles.negociavelBadge}>
               <Text style={styles.negociavelText}>Negociável</Text>
             </View>
-          )}
+          ) : null}
+        </View>
+
+        {/* Preço Copa hoje */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Preço Copa hoje</Text>
+          <View style={styles.copaCard}>
+            {tabelaStatus === 'loading' ? (
+              <ActivityIndicator color={colors.primary} />
+            ) : tabelaStatus === 'error' ? (
+              <>
+                <Text style={styles.copaMuted}>Não foi possível carregar a tabela de preços da Copa agora.</Text>
+                <TouchableOpacity onPress={() => carregarTabela(true)} style={styles.copaRetry}>
+                  <Feather name="refresh-cw" size={14} color={colors.primary} />
+                  <Text style={styles.copaRetryText}>Tentar de novo</Text>
+                </TouchableOpacity>
+              </>
+            ) : pricing ? (
+              <>
+                <Text style={styles.copaLinha}>{pricing.linhaUsada}{pricing.safraTabela ? ` • safra ${pricing.safraTabela}` : ''}</Text>
+                <View style={styles.copaPrecoRow}>
+                  <Text style={styles.copaPreco}>{formatBRL(pricing.precoRef)}</Text>
+                  <Text style={styles.precoUnit}>/saca</Text>
+                </View>
+                <View style={styles.copaTotalRow}>
+                  <Text style={styles.copaTotalLabel}>Valor estimado ({lote.quantidade_sacas} sc)</Text>
+                  <Text style={styles.copaTotal}>{formatBRL(pricing.valorEstimado)}</Text>
+                </View>
+                {pricing.observacoes.map((o, i) => (
+                  <Text key={i} style={styles.copaObs}>• {o}</Text>
+                ))}
+                <Text style={styles.copaAviso}>
+                  Valor de referência, sujeito a avaliação da amostra.
+                  {pricing.dataTabela ? ` Tabela de ${pricing.dataTabela}.` : ''}
+                </Text>
+              </>
+            ) : (
+              <>
+                <Text style={styles.copaMuted}>{motivoSemPrecoCopa(lote, tabela)}</Text>
+                {(!lote.bebida || lote.cata == null) && (
+                  <TouchableOpacity onPress={handleEdit} style={styles.copaRetry}>
+                    <Feather name="edit-2" size={14} color={colors.primary} />
+                    <Text style={styles.copaRetryText}>Completar dados do lote</Text>
+                  </TouchableOpacity>
+                )}
+              </>
+            )}
+          </View>
+
+          <TouchableOpacity style={styles.ofertaBtn} onPress={handleOferecer} disabled={busy}>
+            <Feather name="message-circle" size={20} color={colors.white} />
+            <Text style={styles.ofertaBtnText}>Oferecer este lote à Copa</Text>
+          </TouchableOpacity>
+          <Text style={styles.ofertaHint}>Abre o WhatsApp da Copa com os dados do lote já escritos.</Text>
         </View>
 
         {/* Informações */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Informações do Lote</Text>
           <View style={styles.infoCard}>
+            <InfoRow icon="hash" label="Código" value={codigoLote(lote)} />
             <InfoRow icon="package" label="Sacas" value={`${lote.quantidade_sacas}`} />
-            {lote.peneira && <InfoRow icon="filter" label="Peneira" value={lote.peneira} />}
-            {lote.bebida && <InfoRow icon="coffee" label="Bebida" value={lote.bebida} />}
-            {lote.cata != null && <InfoRow icon="search" label="Cata" value={`${lote.cata} defeitos`} />}
-            {lote.altitude_metros && <InfoRow icon="triangle" label="Altitude" value={`${lote.altitude_metros}m`} />}
-            {lote.data_colheita && (
+            {lote.peneira ? <InfoRow icon="filter" label="Peneira" value={lote.peneira} /> : null}
+            {lote.bebida ? <InfoRow icon="coffee" label="Bebida" value={lote.bebida} /> : null}
+            {lote.cata != null ? <InfoRow icon="search" label="Cata" value={`${lote.cata}%`} /> : null}
+            {lote.altitude_metros ? <InfoRow icon="triangle" label="Altitude" value={`${lote.altitude_metros}m`} /> : null}
+            {lote.data_colheita ? (
               <InfoRow icon="calendar" label="Colheita" value={new Date(lote.data_colheita + 'T00:00:00').toLocaleDateString('pt-BR')} />
-            )}
+            ) : null}
           </View>
         </View>
 
         {/* Notas sensoriais */}
-        {lote.notas_sensoriais && (
+        {lote.notas_sensoriais ? (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Notas Sensoriais</Text>
             <View style={styles.notasRow}>
@@ -193,7 +383,7 @@ export default function LoteDetalheScreen() {
               ))}
             </View>
           </View>
-        )}
+        ) : null}
 
         {/* QR Code */}
         <View style={styles.section}>
@@ -206,7 +396,7 @@ export default function LoteDetalheScreen() {
                 <Text style={styles.qrSubtext}>Código único de rastreabilidade</Text>
               </View>
             ) : (
-              <TouchableOpacity style={styles.qrGenerateBtn} onPress={handleGenerateQR}>
+              <TouchableOpacity style={styles.qrGenerateBtn} onPress={handleGenerateQR} disabled={busy}>
                 <Text style={styles.qrGenerateText}>Gerar QR Code</Text>
               </TouchableOpacity>
             )}
@@ -239,9 +429,21 @@ export default function LoteDetalheScreen() {
 
         {/* Compartilhar */}
         <TouchableOpacity style={styles.shareBtn} onPress={handleShare}>
-          <Feather name="share-2" size={20} color={colors.white} />
-          <Text style={styles.shareBtnText}>Compartilhar via WhatsApp</Text>
+          <Feather name="share-2" size={20} color={colors.primary} />
+          <Text style={styles.shareBtnText}>Compartilhar lote</Text>
         </TouchableOpacity>
+
+        {/* Editar / Excluir */}
+        <View style={styles.manageRow}>
+          <TouchableOpacity style={styles.editBtn} onPress={handleEdit} disabled={busy}>
+            <Feather name="edit-2" size={18} color={colors.primary} />
+            <Text style={styles.editBtnText}>Editar</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.deleteBtn} onPress={handleDelete} disabled={busy}>
+            <Feather name="trash-2" size={18} color={colors.error} />
+            <Text style={styles.deleteBtnText}>Excluir</Text>
+          </TouchableOpacity>
+        </View>
 
         <Text style={styles.criadoEm}>
           Criado em {new Date(lote.criado_em).toLocaleDateString('pt-BR')}
@@ -253,10 +455,17 @@ export default function LoteDetalheScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
+  centered: { justifyContent: 'center', alignItems: 'center', padding: spacing.lg },
   content: { padding: spacing.md, paddingTop: 72, paddingBottom: spacing.xxl },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.lg },
+  headerActions: { flexDirection: 'row', alignItems: 'center' },
   backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { fontSize: fontSize.lg, fontWeight: '700', color: colors.text },
+  errorText: { fontSize: fontSize.md, color: colors.textSecondary, textAlign: 'center', marginTop: spacing.md },
+  retryBtn: { backgroundColor: colors.primary, paddingHorizontal: spacing.lg, height: 48, borderRadius: borderRadius.md, alignItems: 'center', justifyContent: 'center', marginTop: spacing.lg },
+  retryBtnText: { color: colors.white, fontSize: fontSize.md, fontWeight: '700' },
+  backLink: { padding: spacing.md, marginTop: spacing.sm },
+  backLinkText: { color: colors.primary, fontSize: fontSize.md, fontWeight: '600' },
   statusBadge: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 6, borderRadius: borderRadius.full, gap: 6, marginBottom: spacing.sm },
   statusDot: { width: 8, height: 8, borderRadius: 4 },
   statusText: { fontSize: fontSize.sm, fontWeight: '600' },
@@ -270,6 +479,21 @@ const styles = StyleSheet.create({
   negociavelText: { fontSize: fontSize.xs, fontWeight: '600', color: '#F57F17' },
   section: { marginTop: spacing.xl },
   sectionTitle: { fontSize: fontSize.md, fontWeight: '700', color: colors.text, marginBottom: spacing.sm },
+  copaCard: { backgroundColor: colors.surfaceVariant, borderRadius: borderRadius.lg, padding: spacing.md, borderWidth: 1, borderColor: colors.primaryLight },
+  copaLinha: { fontSize: fontSize.sm, fontWeight: '600', color: colors.primaryDark },
+  copaPrecoRow: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.xs, marginTop: 2 },
+  copaPreco: { fontSize: fontSize.xxl, fontWeight: '700', color: colors.primary },
+  copaTotalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginTop: spacing.sm, paddingTop: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border },
+  copaTotalLabel: { fontSize: fontSize.sm, color: colors.textSecondary, flex: 1 },
+  copaTotal: { fontSize: fontSize.lg, fontWeight: '700', color: colors.text },
+  copaObs: { fontSize: fontSize.xs, color: colors.textSecondary, marginTop: spacing.xs },
+  copaAviso: { fontSize: fontSize.xs, color: colors.textSecondary, fontStyle: 'italic', marginTop: spacing.sm },
+  copaMuted: { fontSize: fontSize.sm, color: colors.textSecondary },
+  copaRetry: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: spacing.sm, paddingVertical: spacing.xs },
+  copaRetryText: { fontSize: fontSize.sm, fontWeight: '600', color: colors.primary },
+  ofertaBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, backgroundColor: '#25D366', height: 56, borderRadius: borderRadius.md, marginTop: spacing.md },
+  ofertaBtnText: { color: colors.white, fontSize: fontSize.md, fontWeight: '700' },
+  ofertaHint: { fontSize: fontSize.xs, color: colors.textSecondary, textAlign: 'center', marginTop: spacing.xs },
   infoCard: { backgroundColor: colors.surface, borderRadius: borderRadius.lg, padding: spacing.md, borderWidth: 1, borderColor: colors.border },
   infoRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, gap: spacing.sm },
   infoLabel: { fontSize: fontSize.sm, color: colors.textSecondary, width: 80 },
@@ -287,7 +511,12 @@ const styles = StyleSheet.create({
   statusOption: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, padding: spacing.md, borderRadius: borderRadius.md, borderWidth: 1, borderColor: colors.border, gap: spacing.sm },
   statusOptionDot: { width: 10, height: 10, borderRadius: 5 },
   statusOptionText: { flex: 1, fontSize: fontSize.md, color: colors.text },
-  shareBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, backgroundColor: '#25D366', height: 52, borderRadius: borderRadius.md, marginTop: spacing.xl },
-  shareBtnText: { color: colors.white, fontSize: fontSize.md, fontWeight: '700' },
+  shareBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.primary, height: 52, borderRadius: borderRadius.md, marginTop: spacing.xl },
+  shareBtnText: { color: colors.primary, fontSize: fontSize.md, fontWeight: '700' },
+  manageRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
+  editBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, height: 52, borderRadius: borderRadius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
+  editBtnText: { color: colors.primary, fontSize: fontSize.md, fontWeight: '700' },
+  deleteBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, height: 52, borderRadius: borderRadius.md, borderWidth: 1, borderColor: colors.error, backgroundColor: colors.surface },
+  deleteBtnText: { color: colors.error, fontSize: fontSize.md, fontWeight: '700' },
   criadoEm: { fontSize: fontSize.xs, color: colors.textLight, textAlign: 'center', marginTop: spacing.lg },
 });

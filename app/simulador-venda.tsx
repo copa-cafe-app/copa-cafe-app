@@ -5,46 +5,84 @@ import { useState, useEffect } from 'react';
 import { colors, spacing, fontSize, borderRadius } from '../src/constants/theme';
 import { supabase } from '../src/services/supabase';
 import { useAuthStore } from '../src/stores/authStore';
-import { parseBRL } from '../src/utils/format';
+import { parseBRL, formatBRL } from '../src/utils/format';
+import { safrasRecentes, safraDaData } from '../src/utils/safra';
 import { fetchCopaPrices, precoDestaque } from '../src/services/copaPrices.service';
+
+// Evita que a tela fique presa no carregamento com sinal fraco.
+function comTimeout<T>(p: PromiseLike<T>, ms = 15000): Promise<T> {
+  return Promise.race([
+    Promise.resolve(p),
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error('tempo esgotado')), ms)),
+  ]);
+}
+
+const SAFRAS = safrasRecentes(3);
+
+interface DespesaValor { valor: number; safra: string | null; data: string }
+interface LoteSacas { safra: string; quantidade_sacas: number }
 
 export default function SimuladorVendaScreen() {
   const { user } = useAuthStore();
   const [sacas, setSacas] = useState('');
   const [precoManual, setPrecoManual] = useState('');
   const [cotacaoAtual, setCotacaoAtual] = useState(0);
-  const [custoMedioSaca, setCustoMedioSaca] = useState(0);
+  const [despesas, setDespesas] = useState<DespesaValor[]>([]);
+  const [lotes, setLotes] = useState<LoteSacas[]>([]);
+  const [safraSel, setSafraSel] = useState(SAFRAS[0]);
+  const [erroCustos, setErroCustos] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let cancel = false;
     Promise.all([
       // Preço sugerido = preço da COPA (Bebida/Duro cata 20), não a bolsa. A bolsa
       // (ICE) é só referência de mercado em dólar e não serve pra simular receita.
       // Antes isto lia `pricesData.arabica.preco_saca` — chave que a função
       // `coffee-prices` nunca devolveu, então a cotação ficava sempre em ZERO e a
       // simulação só funcionava se o produtor digitasse o preço na mão.
-      fetchCopaPrices().catch(() => null),
-      // Buscar custo médio
+      comTimeout(fetchCopaPrices()).catch(() => null),
+      // Despesas e lotes (com safra) pra estimar custo/saca da safra escolhida.
       user?.id
-        ? supabase.from('despesas_producao').select('valor').eq('produtor_id', user.id)
-        : Promise.resolve({ data: [] }),
-      // Buscar total de sacas cadastradas pra estimar custo/saca
+        ? comTimeout(supabase.from('despesas_producao').select('valor, safra, data').eq('produtor_id', user.id))
+            .catch(() => ({ data: null, error: true }))
+        : Promise.resolve({ data: [], error: null }),
       user?.id
-        ? supabase.from('lotes').select('quantidade_sacas').eq('produtor_id', user.id)
-        : Promise.resolve({ data: [] }),
-    ]).then(([feed, despRes, lotesRes]) => {
-      const precoCopa = feed ? precoDestaque(feed) : null;
-      if (precoCopa) setCotacaoAtual(precoCopa);
-      const totalDespesas = (despRes.data || []).reduce((sum: number, d: any) => sum + (d.valor || 0), 0);
-      const totalSacas = (lotesRes.data || []).reduce((sum: number, l: any) => sum + (l.quantidade_sacas || 0), 0);
-      if (totalSacas > 0) {
-        setCustoMedioSaca(Math.round((totalDespesas / totalSacas) * 100) / 100);
-      }
-      setLoading(false);
-    });
-  }, []);
+        ? comTimeout(supabase.from('lotes').select('safra, quantidade_sacas').eq('produtor_id', user.id))
+            .catch(() => ({ data: null, error: true }))
+        : Promise.resolve({ data: [], error: null }),
+    ])
+      .then(([feed, despRes, lotesRes]) => {
+        if (cancel) return;
+        const precoCopa = feed ? precoDestaque(feed) : null;
+        if (precoCopa) setCotacaoAtual(precoCopa);
+        if (despRes.error || lotesRes.error) setErroCustos(true);
+        const ds = (despRes.data || []) as DespesaValor[];
+        const ls = (lotesRes.data || []) as LoteSacas[];
+        setDespesas(ds);
+        setLotes(ls);
+        // Se a safra corrente ainda não tem lotes, começa pela mais recente que tem.
+        const comSacas = SAFRAS.find((sf) => ls.some((l) => l.safra === sf && l.quantidade_sacas > 0));
+        if (comSacas) setSafraSel(comSacas);
+      })
+      .catch(() => { if (!cancel) setErroCustos(true); })
+      .finally(() => { if (!cancel) setLoading(false); });
+    return () => { cancel = true; };
+  }, [user?.id]);
 
-  const qtdSacas = parseInt(sacas) || 0;
+  // Custo médio/saca da safra escolhida = despesas da safra / sacas dos lotes da safra.
+  const totalDespesasSafra = despesas
+    .filter((d) => (d.safra || safraDaData(d.data)) === safraSel)
+    .reduce((sum, d) => sum + (Number(d.valor) || 0), 0);
+  const totalSacasSafra = lotes
+    .filter((l) => l.safra === safraSel)
+    .reduce((sum, l) => sum + (Number(l.quantidade_sacas) || 0), 0);
+  const custoMedioSaca = totalSacasSafra > 0
+    ? Math.round((totalDespesasSafra / totalSacasSafra) * 100) / 100
+    : 0;
+
+  // parseBRL: "1.000" -> 1000 (parseInt dava 1).
+  const qtdSacas = Math.max(0, parseBRL(sacas) ?? 0);
   const precoSaca = precoManual ? (parseBRL(precoManual) ?? cotacaoAtual) : cotacaoAtual;
   const receitaBruta = qtdSacas * precoSaca;
   const custoTotal = qtdSacas * custoMedioSaca;
@@ -130,16 +168,27 @@ export default function SimuladorVendaScreen() {
               - R$ {custoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </Text>
           </View>
+          <View style={styles.safraRow}>
+            {SAFRAS.map((sf) => (
+              <TouchableOpacity key={sf} style={[styles.safraChip, safraSel === sf && styles.safraChipActive]} onPress={() => setSafraSel(sf)}>
+                <Text style={[styles.safraChipText, safraSel === sf && styles.safraChipTextActive]}>{sf}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
           {custoMedioSaca > 0 && (
             <Text style={styles.custoInfo}>
-              (Custo médio: R$ {custoMedioSaca.toFixed(2)}/saca, baseado nas suas despesas)
+              (Custo médio da safra {safraSel}: {formatBRL(custoMedioSaca)}/saca, baseado nas suas despesas e lotes)
             </Text>
           )}
           {custoMedioSaca === 0 && (
             <View style={styles.custoAlerta}>
               <Feather name="alert-triangle" size={16} color="#E65100" />
               <Text style={styles.custoAlertaText}>
-                Preencha seus custos de produção na aba Fazenda para um cálculo mais preciso
+                {erroCustos
+                  ? 'Não foi possível carregar seus custos (sem internet?). O custo não entrou na conta.'
+                  : totalSacasSafra === 0
+                    ? `Cadastre seus lotes da safra ${safraSel} para ver o custo por saca.`
+                    : `Registre as despesas da safra ${safraSel} em Custos de Produção (aba Fazenda) para um cálculo mais preciso.`}
               </Text>
             </View>
           )}
@@ -221,6 +270,11 @@ const styles = StyleSheet.create({
   resultValueGreen: { fontSize: fontSize.md, fontWeight: '600', color: colors.success },
   resultValueRed: { fontSize: fontSize.md, fontWeight: '600', color: colors.error },
   resultValueBold: { fontSize: fontSize.lg, fontWeight: '700' },
+  safraRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.sm },
+  safraChip: { paddingHorizontal: spacing.md, paddingVertical: 6, borderRadius: borderRadius.full, backgroundColor: colors.surfaceVariant },
+  safraChipActive: { backgroundColor: colors.primary },
+  safraChipText: { fontSize: fontSize.sm, fontWeight: '600', color: colors.text },
+  safraChipTextActive: { color: colors.white },
   custoInfo: { fontSize: fontSize.xs, color: colors.textLight, marginBottom: spacing.sm },
   custoAlerta: {
     flexDirection: 'row',

@@ -1,13 +1,15 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, KeyboardAvoidingView, Platform, Image, Modal, ActivityIndicator } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import { useState } from 'react';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useState, useEffect } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { colors, spacing, fontSize, borderRadius } from '../src/constants/theme';
 import { supabase } from '../src/services/supabase';
 import { useAuthStore } from '../src/stores/authStore';
-import { safraAtual } from '../src/utils/safra';
-import { parseBRL } from '../src/utils/format';
+import { safraDaData } from '../src/utils/safra';
+import { parseBRL, formatBRL } from '../src/utils/format';
+import { despesaService, mensagemErroAmigavel } from '../src/services/despesa.service';
 
 const CATEGORIAS = [
   { value: 'INSUMOS', label: 'Insumos' },
@@ -76,7 +78,16 @@ function mediaTypeFromUri(uri: string): string {
 }
 
 export default function NovaDespesaScreen() {
+  const insets = useSafeAreaInsets();
   const { user } = useAuthStore();
+  // Modo edição: /nova-despesa?id=<uuid>
+  const { id: editId } = useLocalSearchParams<{ id?: string }>();
+  const isEdit = !!editId;
+  const [loadingEdit, setLoadingEdit] = useState(isEdit);
+  // Despesa do Diário não pode ser editada aqui: mantém o formulário oculto.
+  const [doDiario, setDoDiario] = useState(false);
+  // URL do comprovante já salvo (edição). Se imageUri === este valor, não re-envia.
+  const [comprovanteExistente, setComprovanteExistente] = useState<string | null>(null);
   const [categoria, setCategoria] = useState('');
   const [descricao, setDescricao] = useState('');
   const [valor, setValor] = useState('');
@@ -94,6 +105,52 @@ export default function NovaDespesaScreen() {
   const [multiItems, setMultiItems] = useState<ScanItem[] | null>(null);
   const [showMulti, setShowMulti] = useState(false);
   const [editCatIdx, setEditCatIdx] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!editId) return;
+    let cancel = false;
+    despesaService
+      .get(editId)
+      .then((d) => {
+        if (cancel) return;
+        if (!d) {
+          Alert.alert('Despesa não encontrada', 'Ela pode ter sido excluída.', [{ text: 'OK', onPress: () => router.back() }]);
+          return;
+        }
+        if (d.atividade_id) {
+          setDoDiario(true);
+          // Despesa do Diário: quem manda é a atividade (syncDespesa sobrescreveria a edição).
+          setDoDiario(true);
+          Alert.alert(
+            'Despesa do Diário de Campo',
+            'Esta despesa veio do Diário de Campo — edite pela atividade.',
+            [
+              { text: 'Voltar', style: 'cancel', onPress: () => router.back() },
+              { text: 'Abrir Diário', onPress: () => router.replace('/diario') },
+            ],
+            { cancelable: false },
+          );
+          return;
+        }
+        setCategoria(d.categoria || 'OUTROS');
+        setDescricao(d.descricao || '');
+        setVendor(d.vendor || '');
+        setValor(formatBRL(d.valor, false));
+        setDataDespesa(isoToBR(d.data));
+        setImageUri(d.comprovante_url);
+        setComprovanteExistente(d.comprovante_url);
+      })
+      .catch((err) => {
+        if (cancel) return;
+        Alert.alert(
+          'Erro',
+          mensagemErroAmigavel(err, 'Não foi possível abrir a despesa. Tente novamente.'),
+          [{ text: 'OK', onPress: () => router.back() }],
+        );
+      })
+      .finally(() => { if (!cancel) setLoadingEdit(false); });
+    return () => { cancel = true; };
+  }, [editId]);
 
   async function pickImage(source: 'camera' | 'gallery', withBase64: boolean) {
     const perm = source === 'camera'
@@ -157,7 +214,7 @@ export default function NovaDespesaScreen() {
       setOcrRaw(data);
       applyOcrResult(data);
     } catch (err: any) {
-      Alert.alert('Erro ao escanear', err.message || 'Não foi possível ler o documento. Preencha manualmente.');
+      Alert.alert('Erro ao escanear', mensagemErroAmigavel(err, 'Não foi possível ler o documento. Preencha manualmente.'));
     } finally {
       setScanning(false);
     }
@@ -217,7 +274,7 @@ export default function NovaDespesaScreen() {
         upsert: false,
       });
 
-    if (error) throw new Error(`Erro no upload: ${error.message}`);
+    if (error) throw error;
 
     const { data: urlData } = supabase.storage
       .from('comprovantes')
@@ -245,6 +302,26 @@ export default function NovaDespesaScreen() {
 
     setSaving(true);
     try {
+      if (isEdit && editId) {
+        // Mantém o comprovante já salvo; só envia se o usuário trocou a foto.
+        let comprovanteUrl: string | null = null;
+        if (imageUri) {
+          comprovanteUrl = imageUri === comprovanteExistente ? comprovanteExistente : await uploadComprovante();
+        }
+        await despesaService.update(editId, {
+          categoria,
+          descricao,
+          valor: valorNum,
+          data: isoDate,
+          safra: safraDaData(isoDate),
+          comprovante_url: comprovanteUrl,
+          vendor: vendor || null,
+        });
+        Alert.alert('Sucesso', 'Despesa atualizada!');
+        router.back();
+        return;
+      }
+
       let comprovanteUrl: string | null = null;
       if (imageUri) {
         comprovanteUrl = await uploadComprovante();
@@ -256,7 +333,7 @@ export default function NovaDespesaScreen() {
         descricao,
         valor: valorNum,
         data: isoDate,
-        safra: safraAtual(),
+        safra: safraDaData(isoDate),
         comprovante_url: comprovanteUrl,
         vendor: vendor || null,
         ocr_raw: ocrRaw,
@@ -265,7 +342,7 @@ export default function NovaDespesaScreen() {
       Alert.alert('Sucesso', 'Despesa registrada!');
       router.back();
     } catch (err: any) {
-      Alert.alert('Erro', err.message || 'Não foi possível salvar');
+      Alert.alert('Erro', mensagemErroAmigavel(err, 'Não foi possível salvar a despesa. Tente novamente.'));
     } finally {
       setSaving(false);
     }
@@ -289,7 +366,7 @@ export default function NovaDespesaScreen() {
         descricao: it.descricao,
         valor: valorNum,
         data: isoDate,
-        safra: safraAtual(),
+        safra: safraDaData(isoDate),
         vendor: vendor || null,
         ocr_raw: ocrRaw,
       });
@@ -308,10 +385,36 @@ export default function NovaDespesaScreen() {
       Alert.alert('Sucesso', `${rows.length} despesas registradas!`);
       router.back();
     } catch (err: any) {
-      Alert.alert('Erro', err.message || 'Não foi possível salvar');
+      Alert.alert('Erro', mensagemErroAmigavel(err, 'Não foi possível salvar a despesa. Tente novamente.'));
     } finally {
       setSaving(false);
     }
+  }
+
+  function handleDelete() {
+    if (!editId) return;
+    Alert.alert(
+      'Excluir despesa?',
+      `"${descricao || 'Despesa'}" será apagada. Isso não pode ser desfeito.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Excluir',
+          style: 'destructive',
+          onPress: async () => {
+            setSaving(true);
+            try {
+              await despesaService.remove(editId);
+              router.back();
+            } catch (err) {
+              Alert.alert('Erro', mensagemErroAmigavel(err, 'Não foi possível excluir a despesa. Tente novamente.'));
+            } finally {
+              setSaving(false);
+            }
+          },
+        },
+      ],
+    );
   }
 
   function updateMultiItem(idx: number, patch: Partial<ScanItem>) {
@@ -327,18 +430,27 @@ export default function NovaDespesaScreen() {
     setMultiItems((prev) => prev?.filter((_, i) => i !== idx) ?? null);
   }
 
+  if (loadingEdit || doDiario) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-    <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+    <ScrollView style={styles.container} contentContainerStyle={[styles.content, { paddingBottom: 40 + insets.bottom }]} keyboardShouldPersistTaps="handled">
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Feather name="arrow-left" size={22} color={colors.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Nova Despesa</Text>
+        <Text style={styles.headerTitle}>{isEdit ? 'Editar despesa' : 'Nova Despesa'}</Text>
         <View style={{ width: 40 }} />
       </View>
 
-      {/* Scan CTA */}
+      {/* Scan CTA (só no cadastro — o scan pode gerar várias despesas) */}
+      {!isEdit && (<>
       <TouchableOpacity
         style={styles.scanBtn}
         onPress={() => setShowScanOptions(true)}
@@ -357,6 +469,7 @@ export default function NovaDespesaScreen() {
         )}
       </TouchableOpacity>
       <Text style={styles.scanHint}>Foto do documento e preenchemos os campos pra você</Text>
+      </>)}
 
       <Text style={styles.label}>Categoria</Text>
       <TouchableOpacity style={styles.select} onPress={() => setShowCat(!showCat)}>
@@ -423,13 +536,20 @@ export default function NovaDespesaScreen() {
       )}
 
       <TouchableOpacity style={[styles.saveBtn, saving && { opacity: 0.5 }]} onPress={handleSave} disabled={saving}>
-        <Text style={styles.saveBtnText}>{saving ? 'Salvando...' : 'Registrar Despesa'}</Text>
+        <Text style={styles.saveBtnText}>{saving ? 'Salvando...' : isEdit ? 'Salvar alterações' : 'Registrar Despesa'}</Text>
       </TouchableOpacity>
+
+      {isEdit && (
+        <TouchableOpacity style={styles.deleteBtn} onPress={handleDelete} disabled={saving}>
+          <Feather name="trash-2" size={18} color={colors.error} />
+          <Text style={styles.deleteBtnText}>Excluir despesa</Text>
+        </TouchableOpacity>
+      )}
 
       {/* Modal de opções de imagem (comprovante manual) */}
       <Modal visible={showImageOptions} transparent animationType="fade" onRequestClose={() => setShowImageOptions(false)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowImageOptions(false)}>
-          <View style={styles.modalContent}>
+          <View style={[styles.modalContent, { paddingBottom: spacing.xxl + insets.bottom }]}>
             <Text style={styles.modalTitle}>Anexar Comprovante</Text>
             <TouchableOpacity style={styles.modalOption} onPress={takePhoto}>
               <Feather name="camera" size={20} color={colors.primary} />
@@ -449,7 +569,7 @@ export default function NovaDespesaScreen() {
       {/* Modal de opções de scan */}
       <Modal visible={showScanOptions} transparent animationType="fade" onRequestClose={() => setShowScanOptions(false)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowScanOptions(false)}>
-          <View style={styles.modalContent}>
+          <View style={[styles.modalContent, { paddingBottom: spacing.xxl + insets.bottom }]}>
             <Text style={styles.modalTitle}>Escanear Documento</Text>
             <TouchableOpacity style={styles.modalOption} onPress={() => scanFromSource('camera')}>
               <Feather name="camera" size={20} color={colors.primary} />
@@ -476,7 +596,7 @@ export default function NovaDespesaScreen() {
             <Text style={styles.fullModalTitle}>{multiItems?.length || 0} itens encontrados</Text>
             <View style={{ width: 24 }} />
           </View>
-          <ScrollView contentContainerStyle={{ padding: spacing.md }} keyboardShouldPersistTaps="handled">
+          <ScrollView contentContainerStyle={{ padding: spacing.md, paddingBottom: spacing.xl + insets.bottom }} keyboardShouldPersistTaps="handled">
             <Text style={styles.multiHint}>Revise, edite ou remova os itens antes de salvar.</Text>
             {multiItems?.map((it, idx) => (
               <View key={idx} style={styles.multiCard}>
@@ -574,6 +694,8 @@ const styles = StyleSheet.create({
   // Save button
   saveBtn: { backgroundColor: colors.primary, height: 52, borderRadius: borderRadius.md, alignItems: 'center', justifyContent: 'center', marginTop: spacing.xl },
   saveBtnText: { color: colors.white, fontSize: fontSize.md, fontWeight: '700' },
+  deleteBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, height: 52, borderRadius: borderRadius.md, borderWidth: 1, borderColor: colors.error, marginTop: spacing.md },
+  deleteBtnText: { color: colors.error, fontSize: fontSize.md, fontWeight: '700' },
   // Modal
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalContent: { backgroundColor: colors.surface, borderTopLeftRadius: borderRadius.xl, borderTopRightRadius: borderRadius.xl, padding: spacing.lg, paddingBottom: spacing.xxl },

@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, ScrollView, Alert } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { useState, useCallback } from 'react';
@@ -6,6 +6,9 @@ import { colors, spacing, fontSize, borderRadius } from '../../../src/constants/
 import { supabase } from '../../../src/services/supabase';
 import { useAuthStore } from '../../../src/stores/authStore';
 import { formatBRL } from '../../../src/utils/format';
+import { fetchCopaPriceTable, type CopaPriceTable } from '../../../src/services/copaPrices.service';
+import { precoCopaParaLote } from '../../../src/utils/lotePricing';
+import { excluirLote, mensagemErroLote, processoLabels } from '../../../src/services/lote.service';
 
 const FILTROS = [
   { key: 'TODOS', label: 'Todos' },
@@ -39,14 +42,26 @@ const statusConfig: Record<LoteStatus, { label: string; color: string; bg: strin
   ENCERRADO: { label: 'Encerrado', color: '#999', bg: '#F5F5F5' },
 };
 
-function LoteCard({ lote }: { lote: Lote }) {
-  const status = statusConfig[lote.status];
+type LoteCardProps = {
+  lote: Lote;
+  tabela: CopaPriceTable | null;
+  onEdit: (lote: Lote) => void;
+  onDelete: (lote: Lote) => void;
+};
+
+function LoteCard({ lote, tabela, onEdit, onDelete }: LoteCardProps) {
+  const status = statusConfig[lote.status] || statusConfig.RASCUNHO;
+  const pricing = precoCopaParaLote(lote, tabela);
   return (
-    <TouchableOpacity style={styles.card} onPress={() => router.push({ pathname: '/lote-detalhe', params: { id: lote.id } })}>
+    <TouchableOpacity
+      style={styles.card}
+      onPress={() => router.push({ pathname: '/lote-detalhe', params: { id: lote.id } })}
+      onLongPress={() => onEdit(lote)}
+    >
       <View style={styles.cardTop}>
         <View style={{ flex: 1 }}>
           <Text style={styles.variedade}>{lote.variedade}</Text>
-          <Text style={styles.processo}>{lote.processo} • {lote.safra}</Text>
+          <Text style={styles.processo}>{processoLabels[lote.processo] || lote.processo} • {lote.safra}</Text>
         </View>
         <View style={[styles.badge, { backgroundColor: status.bg }]}>
           <Text style={[styles.badgeText, { color: status.color }]}>{status.label}</Text>
@@ -63,12 +78,28 @@ function LoteCard({ lote }: { lote: Lote }) {
             <Text style={styles.statText}>{formatBRL(lote.preco_por_saca)}/sc</Text>
           </View>
         )}
-        {lote.bebida && (
+        {lote.bebida ? (
           <View style={styles.stat}>
             <Feather name="coffee" size={14} color={colors.secondary} />
             <Text style={styles.statText}>{lote.bebida}</Text>
           </View>
-        )}
+        ) : null}
+      </View>
+      {pricing && (
+        <View style={styles.estimativa}>
+          <Text style={styles.estimativaLabel}>Estimativa Copa hoje ({pricing.linhaUsada})</Text>
+          <Text style={styles.estimativaValor}>≈ {formatBRL(pricing.valorEstimado)}</Text>
+        </View>
+      )}
+      <View style={styles.cardActions}>
+        <TouchableOpacity style={styles.cardActionBtn} onPress={() => onEdit(lote)} accessibilityLabel="Editar lote">
+          <Feather name="edit-2" size={15} color={colors.primary} />
+          <Text style={styles.cardActionText}>Editar</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.cardActionBtn} onPress={() => onDelete(lote)} accessibilityLabel="Excluir lote">
+          <Feather name="trash-2" size={15} color={colors.error} />
+          <Text style={[styles.cardActionText, { color: colors.error }]}>Excluir</Text>
+        </TouchableOpacity>
       </View>
     </TouchableOpacity>
   );
@@ -78,23 +109,60 @@ export default function LotesScreen() {
   const { user } = useAuthStore();
   const [lotes, setLotes] = useState<Lote[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [filtro, setFiltro] = useState('TODOS');
+  const [tabela, setTabela] = useState<CopaPriceTable | null>(null);
 
-  useFocusEffect(
-    useCallback(() => {
-      if (!user?.id) return;
-      setLoading(true);
-      supabase
-        .from('lotes')
-        .select('*')
-        .eq('produtor_id', user.id)
-        .order('criado_em', { ascending: false })
-        .then(({ data, error }) => {
+  const carregar = useCallback(() => {
+    if (!user?.id) return;
+    setLoading(true);
+    setLoadError(false);
+    supabase
+      .from('lotes')
+      .select('*')
+      .eq('produtor_id', user.id)
+      .order('criado_em', { ascending: false })
+      .then(
+        ({ data, error }) => {
           if (!error && data) setLotes(data as Lote[]);
+          else setLoadError(true);
           setLoading(false);
-        });
-    }, [user?.id])
-  );
+        },
+        () => { setLoadError(true); setLoading(false); }
+      );
+    // Tabela da Copa: uma busca só (cache em memória no service). Se falhar,
+    // a lista funciona igual, só sem a estimativa.
+    fetchCopaPriceTable().then(setTabela, () => {});
+  }, [user?.id]);
+
+  useFocusEffect(carregar);
+
+  function handleEdit(lote: Lote) {
+    router.push({ pathname: '/novo-lote', params: { id: lote.id } });
+  }
+
+  function handleDelete(lote: Lote) {
+    if (!user?.id) return;
+    Alert.alert(
+      'Excluir lote',
+      `Excluir o lote ${lote.variedade} (${lote.quantidade_sacas} sacas)? Essa ação não pode ser desfeita.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Excluir',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await excluirLote(lote.id, user.id);
+              setLotes((prev) => prev.filter((l) => l.id !== lote.id));
+            } catch (err) {
+              Alert.alert('Erro', mensagemErroLote(err, 'excluir o lote'));
+            }
+          },
+        },
+      ]
+    );
+  }
 
   const filteredLotes = filtro === 'TODOS' ? lotes : lotes.filter((l) => l.status === filtro);
 
@@ -123,14 +191,26 @@ export default function LotesScreen() {
         <FlatList
           data={filteredLotes}
           keyExtractor={(item) => item.id}
-          renderItem={({ item }) => <LoteCard lote={item} />}
+          renderItem={({ item }) => (
+            <LoteCard lote={item} tabela={tabela} onEdit={handleEdit} onDelete={handleDelete} />
+          )}
           contentContainerStyle={styles.list}
           ListEmptyComponent={
-            <View style={styles.empty}>
-              <Feather name="package" size={48} color={colors.textLight} />
-              <Text style={styles.emptyText}>Nenhum lote cadastrado</Text>
-              <Text style={styles.emptySubtext}>Toque no + para criar seu primeiro lote</Text>
-            </View>
+            loadError ? (
+              <View style={styles.empty}>
+                <Feather name="wifi-off" size={48} color={colors.textLight} />
+                <Text style={styles.emptyText}>Não foi possível carregar os lotes</Text>
+                <TouchableOpacity style={styles.retryBtn} onPress={carregar}>
+                  <Text style={styles.retryBtnText}>Tentar de novo</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={styles.empty}>
+                <Feather name="package" size={48} color={colors.textLight} />
+                <Text style={styles.emptyText}>Nenhum lote cadastrado</Text>
+                <Text style={styles.emptySubtext}>Toque no + para criar seu primeiro lote</Text>
+              </View>
+            )
           }
         />
       )}
@@ -166,12 +246,20 @@ const styles = StyleSheet.create({
   processo: { fontSize: fontSize.sm, color: colors.textSecondary, marginTop: 2 },
   badge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: borderRadius.full },
   badgeText: { fontSize: fontSize.xs, fontWeight: '600' },
-  cardBottom: { flexDirection: 'row', gap: spacing.md },
+  cardBottom: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
   stat: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   statText: { fontSize: fontSize.sm, color: colors.textSecondary },
+  estimativa: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginTop: spacing.sm, paddingTop: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border, gap: spacing.sm },
+  estimativaLabel: { fontSize: fontSize.xs, color: colors.textSecondary, flex: 1 },
+  estimativaValor: { fontSize: fontSize.md, fontWeight: '700', color: colors.primary },
+  cardActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.sm, marginTop: spacing.sm },
+  cardActionBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: spacing.sm, paddingVertical: 6, borderRadius: borderRadius.md, backgroundColor: colors.background },
+  cardActionText: { fontSize: fontSize.sm, fontWeight: '600', color: colors.primary },
   empty: { alignItems: 'center', marginTop: 80 },
   emptyText: { fontSize: fontSize.lg, fontWeight: '600', color: colors.textSecondary, marginTop: spacing.md },
   emptySubtext: { fontSize: fontSize.sm, color: colors.textLight, marginTop: spacing.xs },
+  retryBtn: { backgroundColor: colors.primary, paddingHorizontal: spacing.lg, height: 44, borderRadius: borderRadius.md, alignItems: 'center', justifyContent: 'center', marginTop: spacing.md },
+  retryBtnText: { color: colors.white, fontSize: fontSize.md, fontWeight: '700' },
   fab: {
     position: 'absolute',
     bottom: 24,

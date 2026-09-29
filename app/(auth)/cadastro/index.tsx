@@ -1,5 +1,6 @@
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Modal, FlatList, KeyboardAvoidingView, Platform } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { colors, spacing, fontSize, borderRadius } from '../../../src/constants/theme';
 import { useCadastroStore } from '../../../src/stores/cadastroStore';
@@ -15,6 +16,7 @@ import { DEFAULT_OTP_CHANNEL } from '../../../src/constants/config';
 export default function CadastroStep1() {
   const { email, senha, telefone, setField } = useCadastroStore();
   const { sendOtp } = useAuthStore();
+  const insets = useSafeAreaInsets();
   const [confirmarSenha, setConfirmarSenha] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -67,7 +69,7 @@ export default function CadastroStep1() {
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-    <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+    <ScrollView style={styles.container} contentContainerStyle={[styles.content, { paddingBottom: spacing.lg + insets.bottom }]} keyboardShouldPersistTaps="handled">
       <WizardProgress current={1} />
 
       <Text style={styles.title}>Crie sua conta</Text>
@@ -121,7 +123,7 @@ export default function CadastroStep1() {
             onChangeText={(v) => setField('senha', v)}
             placeholderTextColor={colors.textLight}
           />
-          <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+          <TouchableOpacity onPress={() => setShowPassword(!showPassword)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} accessibilityRole="button" accessibilityLabel={showPassword ? 'Ocultar senha' : 'Mostrar senha'}>
             <Feather name={showPassword ? 'eye-off' : 'eye'} size={18} color={colors.textLight} />
           </TouchableOpacity>
         </View>
@@ -169,7 +171,7 @@ export default function CadastroStep1() {
 
       <Modal visible={showCountryPicker} transparent animationType="slide">
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowCountryPicker(false)}>
-          <View style={styles.modalContent}>
+          <View style={[styles.modalContent, { paddingBottom: spacing.lg + insets.bottom }]}>
             <Text style={styles.modalTitle}>Selecionar país</Text>
             <FlatList
               data={COUNTRY_CODES}

@@ -1,5 +1,6 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { colors, spacing, fontSize, borderRadius } from '../src/constants/theme';
@@ -39,6 +40,7 @@ function formatDate(dateStr: string): string {
 export default function PrevisaoScreen() {
   const { forecast, forecastLoading, forecastError, fetchForecast, cityName } = useWeatherStore();
   const { user } = useAuthStore();
+  const insets = useSafeAreaInsets();
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
@@ -59,7 +61,7 @@ export default function PrevisaoScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.backButton} onPress={() => router.back()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} accessibilityRole="button" accessibilityLabel="Voltar">
           <Feather name="arrow-left" size={22} color={colors.text} />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
@@ -83,7 +85,7 @@ export default function PrevisaoScreen() {
           </TouchableOpacity>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={styles.content}>
+        <ScrollView contentContainerStyle={[styles.content, { paddingBottom: spacing.xxl + insets.bottom }]}>
           {/* Legend */}
           <View style={styles.legendRow}>
             <Text style={styles.legendTitle}>Confiabilidade:</Text>

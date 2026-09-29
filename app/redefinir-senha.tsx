@@ -1,5 +1,6 @@
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { colors, spacing, fontSize, borderRadius } from '../src/constants/theme';
@@ -8,6 +9,7 @@ import { useAuthStore } from '../src/stores/authStore';
 import { validatePassword } from '../src/utils/validators';
 
 export default function RedefinirSenhaScreen() {
+  const insets = useSafeAreaInsets();
   const [novaSenha, setNovaSenha] = useState('');
   const [confirmarSenha, setConfirmarSenha] = useState('');
   const [showSenha, setShowSenha] = useState(false);
@@ -57,7 +59,7 @@ export default function RedefinirSenhaScreen() {
 
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.background }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-    <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: spacing.lg }} keyboardShouldPersistTaps="handled">
+    <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: spacing.lg, paddingBottom: spacing.lg + insets.bottom }} keyboardShouldPersistTaps="handled">
       <View style={styles.iconContainer}>
         <View style={styles.iconCircle}>
           <Feather name="lock" size={32} color={colors.primary} />
@@ -79,7 +81,7 @@ export default function RedefinirSenhaScreen() {
             onChangeText={(v) => { setNovaSenha(v); setError(''); }}
             placeholderTextColor={colors.textLight}
           />
-          <TouchableOpacity onPress={() => setShowSenha(!showSenha)}>
+          <TouchableOpacity onPress={() => setShowSenha(!showSenha)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} accessibilityRole="button" accessibilityLabel={showSenha ? 'Ocultar senha' : 'Mostrar senha'}>
             <Feather name={showSenha ? 'eye-off' : 'eye'} size={18} color={colors.textLight} />
           </TouchableOpacity>
         </View>

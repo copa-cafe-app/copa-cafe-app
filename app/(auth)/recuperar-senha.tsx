@@ -1,5 +1,6 @@
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView, Modal, FlatList } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { colors, spacing, fontSize, borderRadius } from '../../src/constants/theme';
 import { useAuthStore } from '../../src/stores/authStore';
@@ -22,6 +23,7 @@ export default function RecuperarSenhaScreen() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { resetPassword, sendOtp, verifyOtp } = useAuthStore();
+  const insets = useSafeAreaInsets();
 
   function getE164Phone() {
     return '+' + country.dial + phone.replace(/\D/g, '');
@@ -104,7 +106,7 @@ export default function RecuperarSenhaScreen() {
   if (codeSent) {
     return (
       <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-      <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: spacing.lg }} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: spacing.lg, paddingBottom: spacing.lg + insets.bottom }} keyboardShouldPersistTaps="handled">
         <View style={styles.iconContainer}>
           <View style={[styles.iconCircle, { backgroundColor: '#E8F5E9' }]}>
             <Feather name="smartphone" size={32} color={colors.primary} />
@@ -152,7 +154,7 @@ export default function RecuperarSenhaScreen() {
 
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-    <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: spacing.lg }} keyboardShouldPersistTaps="handled">
+    <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: spacing.lg, paddingBottom: spacing.lg + insets.bottom }} keyboardShouldPersistTaps="handled">
       <View style={styles.iconContainer}>
         <View style={styles.iconCircle}>
           <Feather name="key" size={32} color={colors.primary} />
@@ -223,7 +225,7 @@ export default function RecuperarSenhaScreen() {
 
       <Modal visible={showCountryPicker} transparent animationType="slide">
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowCountryPicker(false)}>
-          <View style={styles.modalContent}>
+          <View style={[styles.modalContent, { paddingBottom: spacing.lg + insets.bottom }]}>
             <Text style={styles.modalTitle}>Selecionar país</Text>
             <FlatList
               data={COUNTRY_CODES}

@@ -99,7 +99,7 @@ export default function AlertasPrecoScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} accessibilityRole="button" accessibilityLabel="Voltar">
           <Feather name="arrow-left" size={22} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Alertas de Preço</Text>
@@ -109,7 +109,7 @@ export default function AlertasPrecoScreen() {
       {loading ? (
         <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 80 }} />
       ) : (
-        <ScrollView contentContainerStyle={styles.list}>
+        <ScrollView contentContainerStyle={[styles.list, { paddingBottom: 100 + insets.bottom }]}>
           {alertas.length === 0 ? (
             <View style={styles.empty}>
               <Feather name="bell" size={48} color={colors.textLight} />
@@ -138,10 +138,10 @@ export default function AlertasPrecoScreen() {
                   </Text>
                 </View>
                 <View style={styles.cardActions}>
-                  <TouchableOpacity onPress={() => handleToggle(a)} style={styles.toggleBtn}>
+                  <TouchableOpacity onPress={() => handleToggle(a)} style={styles.toggleBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} accessibilityRole="button" accessibilityLabel={a.ativo ? 'Desativar alerta' : 'Ativar alerta'}>
                     <Feather name={a.ativo ? 'bell' : 'bell-off'} size={18} color={a.ativo ? colors.primary : colors.textLight} />
                   </TouchableOpacity>
-                  <TouchableOpacity onPress={() => handleDelete(a.id)} style={styles.deleteBtn}>
+                  <TouchableOpacity onPress={() => handleDelete(a.id)} style={styles.deleteBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} accessibilityRole="button" accessibilityLabel="Excluir alerta">
                     <Feather name="trash-2" size={16} color={colors.error} />
                   </TouchableOpacity>
                 </View>
@@ -151,7 +151,7 @@ export default function AlertasPrecoScreen() {
         </ScrollView>
       )}
 
-      <TouchableOpacity style={[styles.fab, { bottom: spacing.lg + insets.bottom }]} onPress={() => setShowModal(true)}>
+      <TouchableOpacity style={[styles.fab, { bottom: spacing.lg + insets.bottom }]} onPress={() => setShowModal(true)} accessibilityRole="button" accessibilityLabel="Novo alerta">
         <Feather name="plus" size={26} color={colors.white} />
       </TouchableOpacity>
 
@@ -159,7 +159,7 @@ export default function AlertasPrecoScreen() {
       <Modal visible={showModal} transparent animationType="slide">
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View style={styles.modalOverlay}>
-          <ScrollView style={styles.modalContent} keyboardShouldPersistTaps="handled">
+          <ScrollView style={styles.modalContent} contentContainerStyle={{ paddingBottom: insets.bottom }} keyboardShouldPersistTaps="handled">
             <Text style={styles.modalTitle}>Novo Alerta</Text>
 
             {CONILON_DISPONIVEL && (

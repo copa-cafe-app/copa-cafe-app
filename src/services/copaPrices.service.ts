@@ -126,3 +126,83 @@ export async function fetchCopaPrices(): Promise<CopaCafeFeed> {
 export function precoDestaque(feed: CopaCafeFeed): number | null {
   return feed.precos.length ? parseBRL(feed.precos[0].preco) : null;
 }
+
+// ─── Tabela completa (todas as catas + safra) ────────────────────────────────
+// Adição para o lote ↔ preço Copa: `fetchCopaPrices` só devolve as linhas de
+// cata 20 (é o que as telas de cotação/alerta mostram). Pra estimar o valor de
+// um lote precisamos também das catas 25/30 e da safra de cada linha, já como
+// número. Não altera o comportamento de `fetchCopaPrices`.
+//
+// Estrutura da planilha (colunas 0-based): [2]=tipo ("Rio Minas", "Duro"),
+// [3]=cata ("20%"), [4]=preço ("R$1.144,35"), [5]=safra ("26/27"). A linha com
+// [2]="Data" traz a data em [3].
+
+export interface CopaPriceRow {
+  /** Tipo como está na planilha (ex.: "Rio Minas", "Duro"). */
+  tipo: string;
+  /** Cata em % (20, 25, 30...). null se a célula não tiver número. */
+  cataPct: number | null;
+  /** Preço em R$/saca, já numérico. */
+  preco: number;
+  /** Preço como publicado (ex.: "R$1.144,35"). */
+  precoTexto: string;
+  /** Safra da linha como publicada (ex.: "26/27"). Pode vir vazia. */
+  safra: string;
+}
+
+export interface CopaPriceTable {
+  /** Data da tabela (ex.: "29/09/2026"). */
+  data: string;
+  linhas: CopaPriceRow[];
+}
+
+export function parseCopaPriceTable(rows: string[][]): CopaPriceTable {
+  const linhaData = rows.find((r) => (r[2] || '').trim().toLowerCase() === 'data');
+  const data = (linhaData?.[3] || '').trim();
+  const linhas: CopaPriceRow[] = [];
+  for (const row of rows) {
+    if (!row || row.length < 5) continue;
+    const tipo = (row[2] || '').trim();
+    const precoTexto = (row[4] || '').trim();
+    if (!tipo || !precoTexto.includes('R$')) continue;
+    const preco = parseBRL(precoTexto);
+    if (preco == null || preco <= 0) continue;
+    const cataNum = parseInt((row[3] || '').replace(/\D/g, ''), 10);
+    linhas.push({
+      tipo,
+      cataPct: Number.isFinite(cataNum) ? cataNum : null,
+      preco,
+      precoTexto,
+      safra: (row[5] || '').trim(),
+    });
+  }
+  return { data, linhas };
+}
+
+const TABLE_TTL_MS = 10 * 60 * 1000;
+let tableCache: { at: number; table: CopaPriceTable } | null = null;
+let tableInflight: Promise<CopaPriceTable> | null = null;
+
+/**
+ * Tabela completa da Copa, com cache em memória de 10 min (lista de lotes e
+ * detalhe compartilham uma única busca). `force` ignora o cache.
+ */
+export async function fetchCopaPriceTable(opts: { force?: boolean } = {}): Promise<CopaPriceTable> {
+  if (!opts.force && tableCache && Date.now() - tableCache.at < TABLE_TTL_MS) {
+    return tableCache.table;
+  }
+  if (tableInflight) return tableInflight;
+  tableInflight = (async () => {
+    try {
+      const res = await fetch(COPA_CAFE_PRICES_URL);
+      if (!res.ok) throw new Error(`Planilha de preços indisponível (${res.status})`);
+      const table = parseCopaPriceTable(parseCSV(await res.text()));
+      if (!table.linhas.length) throw new Error('Planilha de preços sem linhas utilizáveis');
+      tableCache = { at: Date.now(), table };
+      return table;
+    } finally {
+      tableInflight = null;
+    }
+  })();
+  return tableInflight;
+}

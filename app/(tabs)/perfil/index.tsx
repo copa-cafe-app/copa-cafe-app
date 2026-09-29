@@ -6,7 +6,8 @@ import Constants from 'expo-constants';
 import { colors, spacing, fontSize, borderRadius } from '../../../src/constants/theme';
 import { useAuthStore } from '../../../src/stores/authStore';
 
-const APP_VERSION = Constants.expoConfig?.version ?? '1.0.2';
+// Sem número fixo no fallback: ele ficava desatualizado a cada bump de versão.
+const APP_VERSION = Constants.expoConfig?.version ?? Constants.nativeAppVersion ?? '';
 
 function MenuItem({ icon, title, subtitle, onPress, danger }: { icon: string; title: string; subtitle?: string; onPress?: () => void; danger?: boolean }) {
   return (
@@ -67,7 +68,7 @@ export default function PerfilScreen() {
         <Text style={styles.sectionLabel}>Suporte</Text>
         <MenuItem icon="help-circle" title="Ajuda" onPress={() => router.push('/perfil-ajuda')} />
         <MenuItem icon="message-circle" title="Fale Conosco" onPress={() => router.push('/fale-conosco')} />
-        <MenuItem icon="info" title="Sobre o Copa Café" subtitle={`v${APP_VERSION}`} onPress={() => router.push('/perfil-sobre')} />
+        <MenuItem icon="info" title="Sobre o Copa Café" subtitle={APP_VERSION ? `v${APP_VERSION}` : undefined} onPress={() => router.push('/perfil-sobre')} />
       </View>
 
       <View style={styles.section}>

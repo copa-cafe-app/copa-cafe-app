@@ -58,6 +58,9 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
     const inCadastroConcluido = inCadastro && (segments as string[])[2] === 'concluido';
     const inOnboarding = segments[0] === 'onboarding';
     const inRedefinirSenha = segments[0] === 'redefinir-senha';
+    // Tela pública de preços: acessível sem login (vem do "Ver preço do café
+    // hoje" no login). Logado também pode abrir — não redireciona.
+    const inPublicPrecos = segments[0] === 'precos';
 
     if (inRedefinirSenha) return; // Não interferir na redefinição de senha
     if (inCadastroConcluido) return; // Não interferir na tela de conclusão
@@ -65,7 +68,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
     if (!onboardingDone && !inOnboarding) {
       // Primeiro acesso → onboarding
       router.replace('/onboarding');
-    } else if (!user && !inAuthGroup && !inOnboarding) {
+    } else if (!user && !inAuthGroup && !inOnboarding && !inPublicPrecos) {
       // Não logado → login
       router.replace('/(auth)/login');
     } else if (user && !profile && !inCadastro) {
@@ -104,6 +107,7 @@ export default function RootLayout() {
       >
         <Stack.Screen name="onboarding" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="precos" options={{ headerShown: false }} />
         <Stack.Screen name="(auth)/login" options={{ headerShown: false }} />
         <Stack.Screen name="(auth)/sms-login" options={{ title: 'Login por SMS', headerShown: true }} />
         <Stack.Screen name="(auth)/recuperar-senha" options={{ title: 'Recuperar Senha', headerShown: true }} />

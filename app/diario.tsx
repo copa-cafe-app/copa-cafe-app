@@ -8,7 +8,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { colors, spacing, fontSize, borderRadius } from '../src/constants/theme';
 import { useAuthStore } from '../src/stores/authStore';
 import { useWeatherStore } from '../src/stores/weatherStore';
-import { atividadeService } from '../src/services/atividade.service';
+import { atividadeService, SyncDespesaError } from '../src/services/atividade.service';
 import { userService } from '../src/services/user.service';
 import { uploadComprovante } from '../src/utils/uploadComprovante';
 import { parseBRL } from '../src/utils/format';
@@ -284,7 +284,14 @@ export default function DiarioScreen() {
       setTipo('ADUBACAO');
       await loadAtividades();
     } catch (err: any) {
-      Alert.alert('Erro', err.message || 'Não foi possível salvar a atividade');
+      if (err instanceof SyncDespesaError) {
+        // Mensagem já vem amigável do service. Recarrega a lista porque, na
+        // edição, a atividade pode ter sido salva mesmo sem o custo.
+        Alert.alert('Atenção', err.message);
+        loadAtividades().catch(() => {});
+      } else {
+        Alert.alert('Erro', 'Não foi possível salvar a atividade. Verifique sua internet e tente novamente.');
+      }
     } finally {
       setSaving(false);
     }
@@ -316,16 +323,16 @@ export default function DiarioScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} accessibilityRole="button" accessibilityLabel="Voltar">
           <Feather name="arrow-left" size={22} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Diário de Campo</Text>
-        <TouchableOpacity onPress={() => setShowReport(true)} style={styles.backButton}>
+        <TouchableOpacity onPress={() => setShowReport(true)} style={styles.backButton} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} accessibilityRole="button" accessibilityLabel="Gerar relatório em PDF">
           <Feather name="file-text" size={20} color={colors.primary} />
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={{ flex: 1 }}>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 100 + insets.bottom }}>
         {/* Property selector (only if farms in different cities) */}
         {hasMultipleCities && (
           <ScrollView
@@ -419,7 +426,7 @@ export default function DiarioScreen() {
             </View>
           ) : (
             atividadesDoDia.map((a) => (
-              <TouchableOpacity key={a.id} style={styles.atividadeCard} onPress={() => openEdit(a)} onLongPress={() => handleDelete(a)}>
+              <TouchableOpacity key={a.id} style={styles.atividadeCard} onPress={() => openEdit(a)} onLongPress={() => handleDelete(a)} accessibilityHint="Toque para editar">
                 <View style={[styles.atividadeBadge, { backgroundColor: ATIVIDADE_CORES[a.tipo] }]} />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.atividadeTitulo}>{a.titulo}</Text>
@@ -430,7 +437,17 @@ export default function DiarioScreen() {
                   {a.custo ? (
                     <Text style={styles.atividadeCusto}>R$ {a.custo.toFixed(2)}</Text>
                   ) : null}
-                  <Feather name="edit-2" size={14} color={colors.textLight} style={{ marginTop: 4 }} />
+                  <View style={styles.atividadeActions}>
+                    <Feather name="edit-2" size={14} color={colors.textLight} />
+                    <TouchableOpacity
+                      onPress={() => handleDelete(a)}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Excluir ${a.titulo}`}
+                    >
+                      <Feather name="trash-2" size={16} color={colors.error} />
+                    </TouchableOpacity>
+                  </View>
                 </View>
               </TouchableOpacity>
             ))
@@ -451,7 +468,7 @@ export default function DiarioScreen() {
       </ScrollView>
 
       {/* FAB */}
-      <TouchableOpacity style={[styles.fab, { bottom: spacing.lg + insets.bottom }]} onPress={openNew}>
+      <TouchableOpacity style={[styles.fab, { bottom: spacing.lg + insets.bottom }]} onPress={openNew} accessibilityRole="button" accessibilityLabel="Nova atividade">
         <Feather name="plus" size={26} color={colors.white} />
       </TouchableOpacity>
 
@@ -459,7 +476,7 @@ export default function DiarioScreen() {
       <Modal visible={showModal} transparent animationType="slide" onRequestClose={() => setShowModal(false)}>
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View style={styles.modalOverlay}>
-          <ScrollView style={styles.modalContent} keyboardShouldPersistTaps="handled">
+          <ScrollView style={styles.modalContent} contentContainerStyle={{ paddingBottom: insets.bottom }} keyboardShouldPersistTaps="handled">
             <Text style={styles.modalTitle}>{editingId ? 'Editar Atividade' : 'Nova Atividade'}</Text>
             <Text style={styles.modalDate}>
               {new Date(selectedDate + 'T12:00:00').toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' })}
@@ -572,7 +589,7 @@ export default function DiarioScreen() {
       <Modal visible={showReport} transparent animationType="slide" onRequestClose={() => setShowReport(false)}>
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View style={styles.modalOverlay}>
-          <View style={styles.reportContent}>
+          <View style={[styles.reportContent, { paddingBottom: spacing.xxl + insets.bottom }]}>
             <Text style={styles.modalTitle}>Relatório por Período</Text>
             <Text style={styles.modalDate}>Escolha o intervalo (pode ser mais de um mês)</Text>
 
@@ -682,6 +699,7 @@ const styles = StyleSheet.create({
   confidenceDot: { width: 8, height: 8, borderRadius: 4 },
   confidenceText: { fontSize: fontSize.xs, fontWeight: '500' },
   daySection: { padding: spacing.md },
+  atividadeActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: 4 },
   daySectionTitle: { fontSize: fontSize.md, fontWeight: '600', color: colors.text, marginBottom: spacing.md, textTransform: 'capitalize' },
   emptyDay: { alignItems: 'center', paddingVertical: spacing.xl, gap: spacing.sm },
   emptyDayText: { fontSize: fontSize.sm, color: colors.textLight },

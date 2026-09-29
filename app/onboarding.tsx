@@ -1,5 +1,6 @@
 import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Image } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useState, useRef } from 'react';
 import { FlatList } from 'react-native';
@@ -38,6 +39,7 @@ export default function OnboardingScreen() {
   const flatListRef = useRef<FlatList>(null);
 
   const { setOnboardingDone } = useAuthStore();
+  const insets = useSafeAreaInsets();
 
   async function handleFinish() {
     await AsyncStorage.setItem('@copa_cafe_onboarding_done', 'true');
@@ -100,7 +102,7 @@ export default function OnboardingScreen() {
       </View>
 
       {/* Button */}
-      <TouchableOpacity style={styles.nextBtn} onPress={handleNext}>
+      <TouchableOpacity style={[styles.nextBtn, { marginBottom: 40 + insets.bottom }]} onPress={handleNext}>
         <Text style={styles.nextText}>
           {currentIndex === slides.length - 1 ? 'Começar' : 'Próximo'}
         </Text>

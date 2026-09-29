@@ -3,34 +3,17 @@ import { Feather } from '@expo/vector-icons';
 import { useState, useCallback } from 'react';
 import { useFocusEffect, router } from 'expo-router';
 import { colors, spacing, fontSize, borderRadius } from '../../../src/constants/theme';
-import { SUPABASE_URL, SUPABASE_ANON_KEY, WHATSAPP_NEGOCIACAO } from '../../../src/constants/config';
-import { fetchCopaPrices, type CopaCafePrice } from '../../../src/services/copaPrices.service';
+import { WHATSAPP_NEGOCIACAO } from '../../../src/constants/config';
+import { fetchCopaFeed, fetchMarketData } from '../../../src/services/marketFeeds';
+import { useCachedResource } from '../../../src/hooks/useCachedResource';
+import { CACHE_KEYS } from '../../../src/utils/cache';
+import { CopaPriceTable } from '../../../src/components/prices/CopaPriceTable';
+import { OfflineNotice } from '../../../src/components/prices/OfflineNotice';
 
 // Número do CTA vem de config (WHATSAPP_NEGOCIACAO) — trocar lá quando o número
 // dedicado existir; o atual vira sender do OTP. Ver memória project_cta_whatsapp_swap.
 const WHATSAPP_URL = `https://wa.me/${WHATSAPP_NEGOCIACAO}`;
 const WHATSAPP_CHANNEL = 'https://whatsapp.com/channel/0029Vb6Qo3fL7UVRzGS4fn3M';
-
-interface MarketData {
-  cambio: {
-    usd_brl: number;
-    compra: number;
-    venda: number;
-    variacao_percent: number;
-    fonte: string;
-    ultima_cotacao?: string;
-  };
-  bolsa: {
-    // ICE só em dólar — a conversão pra R$/saca saiu da Edge Function de
-    // propósito. Preço em reais é sempre o da Copa (copaPrices.service).
-    cents_per_lb: number;
-    variacao_percent: number;
-    fonte: string;
-    simbolo: string;
-  };
-  atualizado_em: string;
-  _debug?: string[];
-}
 
 function formatBRL(value: number | null | undefined, decimals = 2): string {
   if (value == null || isNaN(value)) return 'R$ --';
@@ -55,69 +38,31 @@ function VariacaoBadge({ variacao }: { variacao: number | null | undefined }) {
 }
 
 export default function CotacoesScreen() {
-  const [market, setMarket] = useState<MarketData | null>(null);
-  const [copaPrices, setCopaPrices] = useState<CopaCafePrice[]>([]);
-  const [copaDate, setCopaDate] = useState('');
-  const [copaNotes, setCopaNotes] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [copaLoading, setCopaLoading] = useState(true);
+  // Stale-while-revalidate: mostra o último dado salvo na hora e atualiza em
+  // segundo plano. Sem internet, fica o cache + aviso "Sem conexão — ...".
+  const copa = useCachedResource(CACHE_KEYS.copaPrices, fetchCopaFeed);
+  const marketRes = useCachedResource(CACHE_KEYS.market, fetchMarketData);
+  const market = marketRes.data;
+  const loading = marketRes.loading;
   const [refreshing, setRefreshing] = useState(false);
-
-  const fetchMarket = useCallback(() => {
-    return fetch(`${SUPABASE_URL}/functions/v1/coffee-prices`, {
-      headers: { 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
-    })
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.json();
-      })
-      .then((data) => {
-        if (data && typeof data === 'object' && data.cambio) setMarket(data);
-        else setMarket(null);
-      })
-      .catch(() => setMarket(null))
-      .finally(() => setLoading(false));
-  }, []);
-
-  // Busca e parse vivem em src/services/copaPrices.service.ts — a tela de
-  // notificações usa o mesmo feed pros alertas de preço, e dois parsers
-  // separados acabariam divergindo.
-  const fetchCopaCafe = useCallback(() => {
-    return fetchCopaPrices()
-      .then((feed) => {
-        if (feed.data) setCopaDate(feed.data);
-        setCopaPrices(feed.precos);
-        setCopaNotes(feed.notas);
-      })
-      .catch(() => setCopaPrices([]))
-      .finally(() => setCopaLoading(false));
-  }, []);
+  const refreshCopa = copa.refresh;
+  const refreshMarket = marketRes.refresh;
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    setLoading(true);
-    setCopaLoading(true);
-    await Promise.all([fetchMarket(), fetchCopaCafe()]);
-    setRefreshing(false);
-  }, [fetchMarket, fetchCopaCafe]);
+    try {
+      await Promise.all([refreshMarket(), refreshCopa()]);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refreshMarket, refreshCopa]);
 
   useFocusEffect(
     useCallback(() => {
-      setLoading(true);
-      setCopaLoading(true);
-      fetchMarket();
-      fetchCopaCafe();
-    }, [fetchMarket, fetchCopaCafe])
+      refreshMarket();
+      refreshCopa();
+    }, [refreshMarket, refreshCopa])
   );
-
-  if (loading && copaLoading) {
-    return (
-      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-        <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={{ color: colors.textSecondary, marginTop: 12 }}>Buscando cotações...</Text>
-      </View>
-    );
-  }
 
   return (
     <ScrollView
@@ -127,63 +72,13 @@ export default function CotacoesScreen() {
     >
 
       {/* ===== 1. PRECOS COPA CAFE (DESTAQUE PRINCIPAL) ===== */}
-      <View style={styles.copaSection}>
-        <View style={styles.copaSectionHeader}>
-          <View style={styles.copaIconCircle}>
-            <Feather name="coffee" size={22} color={colors.white} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.copaSectionTitle}>Preços Copa Café</Text>
-            <Text style={styles.copaSectionSubtitle}>Referência de compra — Cata 20</Text>
-          </View>
-          {copaDate ? (
-            <View style={styles.copaDateBadge}>
-              <Feather name="calendar" size={12} color={colors.primary} />
-              <Text style={styles.copaDateText}>{copaDate}</Text>
-            </View>
-          ) : null}
-        </View>
-
-        {copaLoading ? (
-          <ActivityIndicator color={colors.primary} style={{ marginVertical: spacing.lg }} />
-        ) : copaPrices.length === 0 ? (
-          <Text style={styles.copaEmpty}>Não foi possível carregar os preços</Text>
-        ) : (
-          <>
-            {/* Cards grandes para cada tipo */}
-            {copaPrices.map((item, i) => {
-              const isRio = item.bebida.toLowerCase().includes('rio');
-              return (
-                <View key={i} style={styles.copaPriceCard}>
-                  <View style={styles.copaPriceLeft}>
-                    <View style={[styles.copaPriceIcon, { backgroundColor: isRio ? '#FFF3E0' : '#E8F5E9' }]}>
-                      <Feather
-                        name="package"
-                        size={20}
-                        color={isRio ? '#E65100' : colors.primary}
-                      />
-                    </View>
-                    <View>
-                      <Text style={styles.copaPriceLabel}>{item.bebida}</Text>
-                      <Text style={styles.copaPriceCata}>Cata {item.cata}</Text>
-                    </View>
-                  </View>
-                  <View style={styles.copaPriceRight}>
-                    <Text style={styles.copaPriceValue}>{item.preco}</Text>
-                    <Text style={styles.copaPriceUnit}>por saca 60kg</Text>
-                  </View>
-                </View>
-              );
-            })}
-
-            {/* Notas */}
-            <Text style={styles.copaPosto}>Preço posto faturado</Text>
-            {copaNotes.map((note, i) => (
-              <Text key={i} style={styles.copaNote}>{note}</Text>
-            ))}
-          </>
-        )}
-      </View>
+      <CopaPriceTable
+        feed={copa.data}
+        loading={copa.loading}
+        offline={copa.offline}
+        savedAt={copa.savedAt}
+        onRetry={refreshCopa}
+      />
 
       {/* WhatsApp CTA logo apos precos Copa Cafe */}
       <TouchableOpacity
@@ -197,6 +92,8 @@ export default function CotacoesScreen() {
         </View>
         <Feather name="chevron-right" size={20} color="rgba(255,255,255,0.7)" />
       </TouchableOpacity>
+
+      {marketRes.offline ? <OfflineNotice what="cotações" savedAt={marketRes.savedAt} /> : null}
 
       {/* ===== 2. DOLAR (MEDIA DESTAQUE) ===== */}
       <View style={styles.dolarCard}>
@@ -313,122 +210,6 @@ export default function CotacoesScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   content: { padding: spacing.md, paddingBottom: spacing.xxl },
-
-  // ===== Copa Cafe (destaque principal) =====
-  copaSection: {
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.lg,
-    padding: spacing.md,
-    marginBottom: spacing.md,
-    borderWidth: 2,
-    borderColor: colors.primary,
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  copaSectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: spacing.md,
-    gap: spacing.sm,
-  },
-  copaIconCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  copaSectionTitle: {
-    fontSize: fontSize.lg,
-    fontWeight: '700',
-    color: colors.text,
-  },
-  copaSectionSubtitle: {
-    fontSize: fontSize.xs,
-    color: colors.textSecondary,
-    marginTop: 1,
-  },
-  copaDateBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.surfaceVariant,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 4,
-    borderRadius: borderRadius.sm,
-    gap: 4,
-  },
-  copaDateText: {
-    fontSize: fontSize.xs,
-    fontWeight: '600',
-    color: colors.primary,
-  },
-  copaEmpty: {
-    fontSize: fontSize.sm,
-    color: colors.textLight,
-    textAlign: 'center',
-    paddingVertical: spacing.lg,
-  },
-
-  // Cards individuais de preco Copa Cafe
-  copaPriceCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: colors.surfaceVariant,
-    borderRadius: borderRadius.md,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
-  },
-  copaPriceLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  copaPriceIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: borderRadius.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  copaPriceLabel: {
-    fontSize: fontSize.md,
-    fontWeight: '700',
-    color: colors.text,
-  },
-  copaPriceCata: {
-    fontSize: fontSize.xs,
-    color: colors.textSecondary,
-    marginTop: 1,
-  },
-  copaPriceRight: {
-    alignItems: 'flex-end',
-  },
-  copaPriceValue: {
-    fontSize: fontSize.xl,
-    fontWeight: '800',
-    color: colors.primary,
-  },
-  copaPriceUnit: {
-    fontSize: fontSize.xs,
-    color: colors.textLight,
-    marginTop: 1,
-  },
-  copaPosto: {
-    fontSize: fontSize.xs,
-    color: colors.textSecondary,
-    fontStyle: 'italic',
-    marginTop: spacing.sm,
-  },
-  copaNote: {
-    fontSize: fontSize.xs,
-    color: colors.textLight,
-    marginTop: 2,
-  },
 
   // ===== Dolar =====
   dolarCard: {

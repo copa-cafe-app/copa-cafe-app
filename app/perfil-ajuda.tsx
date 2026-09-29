@@ -1,5 +1,6 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { colors, spacing, fontSize, borderRadius } from '../src/constants/theme';
@@ -9,7 +10,7 @@ const FAQ = [
   { q: 'Como registrar uma atividade de campo?', a: 'Vá em Fazenda → Diário de Campo. Selecione um dia no calendário e toque no "+" para adicionar uma atividade (adubação, poda, colheita, etc.).' },
   { q: 'Como acompanhar as cotações do café?', a: 'Na aba "Cotações" você encontra os preços atualizados do Arábica e Conilon, além do câmbio USD/BRL.' },
   { q: 'Como analisar a saúde da minha planta?', a: 'Na aba Home, toque em "Saúde da Planta" nos atalhos rápidos. Tire uma foto ou escolha da galeria e a IA vai analisar possíveis doenças.' },
-  { q: 'Meus dados estão seguros?', a: 'Sim! Utilizamos criptografia de ponta a ponta e seguimos todas as normas da LGPD. Seus dados são armazenados em servidores seguros.' },
+  { q: 'Meus dados estão seguros?', a: 'Sim. Seus dados trafegam criptografados (HTTPS) e ficam protegidos com controle de acesso — só você vê as informações da sua fazenda. Seguimos a LGPD: em Perfil → Privacidade você pode exportar ou excluir seus dados.' },
   { q: 'Como alterar minha senha?', a: 'Vá em Perfil → Segurança → Alterar Senha. Digite a nova senha e confirme.' },
 ];
 
@@ -27,10 +28,11 @@ function FaqItem({ q, a }: { q: string; a: string }) {
 }
 
 export default function AjudaScreen() {
+  const insets = useSafeAreaInsets();
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView style={styles.container} contentContainerStyle={[styles.content, { paddingBottom: spacing.xxl + insets.bottom }]}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} accessibilityRole="button" accessibilityLabel="Voltar">
           <Feather name="arrow-left" size={22} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Ajuda</Text>

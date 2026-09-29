@@ -1,5 +1,6 @@
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { colors, spacing, fontSize, borderRadius } from '../../../src/constants/theme';
 import { useCadastroStore } from '../../../src/stores/cadastroStore';
@@ -14,6 +15,7 @@ const estados = [
 
 export default function CadastroStep3() {
   const { nome, cpfCnpj, estado, municipio, setField } = useCadastroStore();
+  const insets = useSafeAreaInsets();
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [showEstados, setShowEstados] = useState(false);
 
@@ -51,7 +53,7 @@ export default function CadastroStep3() {
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-    <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+    <ScrollView style={styles.container} contentContainerStyle={[styles.content, { paddingBottom: spacing.lg + insets.bottom }]} keyboardShouldPersistTaps="handled">
       <WizardProgress current={3} />
 
       <Text style={styles.title}>Seus dados</Text>

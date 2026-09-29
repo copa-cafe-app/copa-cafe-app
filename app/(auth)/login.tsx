@@ -263,6 +263,12 @@ export default function LoginScreen() {
             <Text style={styles.socialText}>Entrar com código por SMS</Text>
           </TouchableOpacity>
 
+          {/* Entrada pública: ver o preço antes de criar conta (reduz abandono) */}
+          <TouchableOpacity style={styles.priceButton} onPress={() => router.push('/precos')}>
+            <Feather name="coffee" size={20} color={colors.primary} />
+            <Text style={styles.priceButtonText}>Ver preço do café hoje</Text>
+          </TouchableOpacity>
+
           <View style={styles.signupRow}>
             <Text style={styles.signupText}>Não tem conta? </Text>
             <TouchableOpacity onPress={() => router.push('/(auth)/cadastro')}>
@@ -332,6 +338,19 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   socialText: { fontSize: fontSize.sm, fontWeight: '600', color: colors.text },
+  priceButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 48,
+    borderRadius: borderRadius.md,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    backgroundColor: colors.surfaceVariant,
+    gap: spacing.sm,
+    marginTop: spacing.md,
+  },
+  priceButtonText: { fontSize: fontSize.md, fontWeight: '700', color: colors.primary },
   signupRow: { flexDirection: 'row', justifyContent: 'center', marginTop: spacing.xl },
   signupText: { fontSize: fontSize.sm, color: colors.textSecondary },
   signupLink: { fontSize: fontSize.sm, fontWeight: '700', color: colors.primary },
