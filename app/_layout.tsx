@@ -7,6 +7,7 @@ import { View, ActivityIndicator } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Linking from 'expo-linking';
 import { supabase } from '../src/services/supabase';
+import { registerForPush, onNotificacaoTocada } from '../src/services/push.service';
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const { user, initialized, profile, initialize, onboardingDone, setOnboardingDone } = useAuthStore();
@@ -79,6 +80,18 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
       router.replace('/(tabs)');
     }
   }, [user, initialized, profile, segments, onboardingDone]);
+
+  // Push: renova o token de quem já autorizou (sem pop-up; a permissão é pedida
+  // ao enviar amostra) e abre o lote ao tocar na notificação.
+  useEffect(() => {
+    if (!user?.id || !profile) return;
+    registerForPush(user.id);
+    return onNotificacaoTocada((data) => {
+      if (typeof data.lote_id === 'string') {
+        router.push({ pathname: '/lote-detalhe', params: { id: data.lote_id } });
+      }
+    });
+  }, [user?.id, !!profile]);
 
   if (!initialized || onboardingDone === null) {
     return (

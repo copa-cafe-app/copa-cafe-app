@@ -87,6 +87,8 @@ export default function AmostrasScreen() {
     setReprovando(null);
     setMotivo('');
     setAmostras((lista) => lista.filter((x) => x.lote_id !== a.lote_id));
+    // Avisa o produtor no celular; se falhar, ele ainda vê o resultado no app
+    supabase.functions.invoke('notificar-amostra', { body: { lote_id: a.lote_id } }).catch(() => {});
   }
 
   function confirmarAprovacao(a: Amostra) {

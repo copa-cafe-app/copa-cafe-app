@@ -21,6 +21,7 @@ import {
   enviarAmostra,
   mensagemAmostraLote,
 } from '../src/services/lote.service';
+import { registerForPush } from '../src/services/push.service';
 
 const statusConfig: Record<string, { label: string; color: string; bg: string }> = {
   RASCUNHO: { label: 'Rascunho', color: '#666', bg: '#E8E8E8' },
@@ -243,7 +244,7 @@ export default function LoteDetalheScreen() {
     if (!lote || !user?.id) return;
     Alert.alert(
       'Enviar amostra',
-      'Confirme depois de separar a amostra deste lote para a Copa. Vamos abrir o WhatsApp para avisar a Copa.',
+      'Confirme depois de separar a amostra deste lote para a Copa. Vamos abrir o WhatsApp para avisar a Copa e te notificar quando ela avaliar.',
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -251,6 +252,8 @@ export default function LoteDetalheScreen() {
           onPress: async () => {
             setBusy(true);
             try {
+              // Momento certo para pedir a permissão: ele quer saber o resultado
+              await registerForPush(user.id, true);
               const atualizado = await enviarAmostra(lote.id, user.id);
               const novoLote = { ...lote, ...atualizado };
               setLote(novoLote);
