@@ -1,0 +1,19 @@
+Notas da versão — Copa Café v1.0.3 (versionCode 7)
+Idioma: Português (Brasil) — pt-BR
+Limite do Play Console: 500 caracteres. O texto abaixo tem ~390.
+DESTINO: track de PRODUÇÃO. Play Console > Copa > Produção > Criar nova versão.
+
+CONTEXTO: o versionCode 5 (v1.0.2, build de 30/06) JÁ foi enviado ao Play — por
+isso esta versão é 1.0.3 / versionCode 7 (o 6 foi buildado em 13/08 e talvez enviado). As correções abaixo são as de julho,
+que nunca chegaram aos usuários.
+================================================================
+
+Nesta versão:
+
+• Correção do botão "Criar minha conta" que ficava inacessível em alguns celulares Android
+• Alertas de preço agora funcionam e usam o preço da Copa Café
+• Simulador de venda corrigido: já vem com o preço do dia preenchido
+• Data da tabela de preços visível na tela de cotações
+• Cadastro avisa quando o e-mail tem erro de digitação e sugere a correção
+• Botões que ficavam atrás da barra do Android foram reposicionados
+• Melhorias de estabilidade

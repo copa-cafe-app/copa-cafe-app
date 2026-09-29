@@ -1,11 +1,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import { corsHeaders, getRequestUser, json, validateImage } from '../_shared/auth.ts';
 
 const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY')!;
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
 
 const SYSTEM_PROMPT = `Você é um assistente especializado em extrair dados de documentos financeiros para produtores de café brasileiros.
 
@@ -57,14 +53,14 @@ serve(async (req) => {
   }
 
   try {
+    // O app chama via supabase.functions.invoke, que já manda o token da sessão
+    const user = await getRequestUser(req);
+    if (!user) return json({ error: 'Não autenticado' }, 401);
+
     const { image_base64, media_type = 'image/jpeg' } = await req.json();
 
-    if (!image_base64) {
-      return new Response(
-        JSON.stringify({ error: 'Imagem obrigatória (base64)' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+    const invalid = validateImage(image_base64, media_type);
+    if (invalid) return json({ error: invalid }, 400);
 
     if (!ANTHROPIC_API_KEY) {
       return new Response(

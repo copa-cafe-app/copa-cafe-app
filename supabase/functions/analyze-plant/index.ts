@@ -1,11 +1,10 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import { corsHeaders, getRequestUser, json, validateImage } from '../_shared/auth.ts';
 
 const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY')!;
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+// O build 1.0.2 (Play Store) chama com a anon key. Depois que o 1.0.3+ (que manda
+// o token da sessão) estiver no ar, setar o secret ANALYZE_PLANT_REQUIRE_AUTH=true.
+const REQUIRE_AUTH = Deno.env.get('ANALYZE_PLANT_REQUIRE_AUTH') === 'true';
 
 const SYSTEM_PROMPT = `Você é um agrônomo especialista em cafeicultura brasileira. Analise a imagem da planta de café e forneça um diagnóstico.
 
@@ -36,14 +35,14 @@ serve(async (req) => {
   }
 
   try {
+    if (REQUIRE_AUTH && !(await getRequestUser(req))) {
+      return json({ error: 'Não autenticado' }, 401);
+    }
+
     const { image_base64, media_type = 'image/jpeg' } = await req.json();
 
-    if (!image_base64) {
-      return new Response(
-        JSON.stringify({ error: 'Imagem obrigatória (base64)' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+    const invalid = validateImage(image_base64, media_type);
+    if (invalid) return json({ error: invalid }, 400);
 
     if (!ANTHROPIC_API_KEY) {
       return new Response(

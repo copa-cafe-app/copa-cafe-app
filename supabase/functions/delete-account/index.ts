@@ -40,6 +40,18 @@ serve(async (req) => {
     const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
       auth: { autoRefreshToken: false, persistSession: false },
     });
+
+    // O cascade não alcança o Storage: apaga os comprovantes (bucket público)
+    // antes, senão as fotos de nota fiscal ficam acessíveis após a exclusão (LGPD).
+    const bucket = admin.storage.from('comprovantes');
+    for (;;) {
+      const { data: files, error: listErr } = await bucket.list(user.id, { limit: 100 });
+      if (listErr) throw listErr;
+      if (!files || files.length === 0) break;
+      const { error: rmErr } = await bucket.remove(files.map((f) => `${user.id}/${f.name}`));
+      if (rmErr) throw rmErr;
+    }
+
     const { error: delErr } = await admin.auth.admin.deleteUser(user.id);
     if (delErr) throw delErr;
 

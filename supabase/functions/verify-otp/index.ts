@@ -63,9 +63,18 @@ serve(async (req) => {
     // Buscar usuário pelo telefone.
     // O Supabase guarda o telefone só com dígitos (sem '+'), então comparamos
     // apenas os dígitos pra não falhar (bug que fazia tentar criar duplicado).
+    // Busca direta via RPC (listUsers só trazia os primeiros 1000 usuários).
     const phoneDigits = phone.replace(/\D/g, '');
-    const { data: { users } } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
-    let user = users.find((u: any) => (u.phone || '').replace(/\D/g, '') === phoneDigits);
+    let user: any = null;
+    const { data: foundId, error: rpcErr } = await supabaseAdmin.rpc('auth_user_id_by_phone', {
+      p_digits: phoneDigits,
+    });
+    if (rpcErr) throw rpcErr;
+    if (foundId) {
+      const { data: found, error: getErr } = await supabaseAdmin.auth.admin.getUserById(foundId);
+      if (getErr) throw getErr;
+      user = found.user;
+    }
     let isNewUser = false;
 
     if (isCadastro) {
@@ -107,18 +116,18 @@ serve(async (req) => {
 
     // ===== LOGIN (sem senha): só telefone =====
     const phoneClean = phone.replace('+', '');
-    // Senha determinística legada — usada SÓ pra compatibilidade com o build antigo
-    // (Play Store), que espera { email, password } e faz signInWithPassword.
-    const legacyPass = `otp_${phoneClean}_${TWILIO_VERIFY_SID}`;
 
     if (!user) {
       // Usuário novo entrando direto por SMS/WhatsApp (sem ter passado pelo cadastro):
       // cria conta só-telefone com email sintético; depois ele preenche o perfil.
+      // Senha aleatória: o login dessas contas é sempre por OTP + token_hash.
+      // (A antiga senha determinística otp_<tel>_<VERIFY_SID> era devolvida na
+      // resposta e permitia deduzir a senha de QUALQUER conta só-telefone.)
       const synthEmail = `${phoneClean}@phone.copacafe.app`;
       const { data: created, error: createErr } = await supabaseAdmin.auth.admin.createUser({
         phone,
         email: synthEmail,
-        password: legacyPass,
+        password: crypto.randomUUID() + crypto.randomUUID(),
         phone_confirm: true,
         email_confirm: true,
       });
@@ -143,9 +152,6 @@ serve(async (req) => {
         mode: 'token',
         token_hash: tokenHash,
         email: user.email,
-        // Compat build antigo: contas legadas têm essa senha; o app antigo usa
-        // estes 2 campos. O app novo lê 'mode'/'token_hash' e ignora 'password'.
-        password: legacyPass,
         user_id: user.id,
         is_new_user: isNewUser,
       }),

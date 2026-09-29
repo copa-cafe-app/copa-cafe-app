@@ -47,23 +47,33 @@ serve(async (req) => {
     });
 
     const uid = user.id;
-    const [perfil, propriedades, lotes, atividades, despesas, alertas] = await Promise.all([
+    const results = await Promise.all([
       admin.from('users').select('*').eq('id', uid).maybeSingle(),
       admin.from('propriedades').select('*').eq('produtor_id', uid),
+      admin.from('talhoes').select('*').eq('produtor_id', uid),
       admin.from('lotes').select('*').eq('produtor_id', uid),
       admin.from('atividades_campo').select('*').eq('produtor_id', uid),
-      admin.from('despesas').select('*').eq('produtor_id', uid),
+      admin.from('despesas_producao').select('*').eq('produtor_id', uid),
       admin.from('alertas_preco').select('*').eq('produtor_id', uid),
+      admin.from('certificacoes').select('*').eq('produtor_id', uid),
+      admin.from('consent_records').select('*').eq('user_id', uid),
     ]);
+    // Export LGPD não pode sair incompleto em silêncio
+    const failed = results.find((r) => r.error);
+    if (failed) throw failed.error;
+    const [perfil, propriedades, talhoes, lotes, atividades, despesas, alertas, certificacoes, consentimentos] = results;
 
     const dump = {
       exportado_em: new Date().toISOString(),
       perfil: perfil.data,
       propriedades: propriedades.data || [],
+      talhoes: talhoes.data || [],
       lotes: lotes.data || [],
       atividades_campo: atividades.data || [],
       despesas: despesas.data || [],
       alertas_preco: alertas.data || [],
+      certificacoes: certificacoes.data || [],
+      consentimentos: consentimentos.data || [],
     };
 
     const destino = user.email;
@@ -78,10 +88,12 @@ serve(async (req) => {
       <p>Aqui está a cópia dos seus dados, conforme solicitado (LGPD).</p>
       <ul>
         <li>Propriedades: ${dump.propriedades.length}</li>
+        <li>Talhões: ${dump.talhoes.length}</li>
         <li>Lotes: ${dump.lotes.length}</li>
         <li>Atividades de campo: ${dump.atividades_campo.length}</li>
         <li>Despesas: ${dump.despesas.length}</li>
         <li>Alertas de preço: ${dump.alertas_preco.length}</li>
+        <li>Certificações: ${dump.certificacoes.length}</li>
       </ul>
       <p>Os dados completos seguem em anexo (JSON).</p>
     `;

@@ -42,10 +42,16 @@ export const authService = {
             body: JSON.stringify({ phone, channel: ch }),
           });
           const data = await res.json();
-          if (!res.ok) throw new Error(data.error || 'Erro ao enviar código');
+          if (!res.ok) {
+            const err: any = new Error(data.error || 'Erro ao enviar código');
+            // 4xx (telefone inválido, limite de tentativas) não melhora com retry
+            err.noRetry = res.status >= 400 && res.status < 500;
+            throw err;
+          }
           return data;
-        } catch (err) {
+        } catch (err: any) {
           lastErr = err;
+          if (err?.noRetry) break;
           if (attempt < maxRetries) await new Promise(r => setTimeout(r, 1000));
         }
       }

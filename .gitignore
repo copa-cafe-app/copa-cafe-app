@@ -44,3 +44,12 @@ google-service-account.json
 # build artifacts baixados do EAS
 *.aab
 *.apk
+
+# cache local do Supabase CLI e config local do Claude Code
+supabase/.temp/
+.claude/settings.local.json
+
+# prints e backups soltos na raiz
+/*.png
+/Prints/
+assets/_backup_icones/

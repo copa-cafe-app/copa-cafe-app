@@ -22,7 +22,9 @@ serve(async (req) => {
     });
 
     if (email) {
-      const clean = email.trim();
+      // Escapa curingas do ILIKE: sem isso "a%@gmail.com" virava busca por
+      // prefixo e permitia extrair emails cadastrados letra por letra.
+      const clean = String(email).trim().replace(/[\\%_]/g, (c) => `\\${c}`);
       const { data } = await supabaseAdmin
         .from('users')
         .select('id')

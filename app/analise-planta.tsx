@@ -6,6 +6,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { File } from 'expo-file-system';
 import { colors, spacing, fontSize, borderRadius } from '../src/constants/theme';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../src/constants/config';
+import { supabase } from '../src/services/supabase';
 
 interface AnaliseResultado {
   saudavel: boolean;
@@ -23,11 +24,14 @@ async function analisarComClaude(uri: string): Promise<AnaliseResultado> {
   const ext = uri.split('.').pop()?.toLowerCase();
   const mediaType = ext === 'png' ? 'image/png' : 'image/jpeg';
 
+  // Token da sessão (a function passa a exigir usuário logado)
+  const { data: { session } } = await supabase.auth.getSession();
   const res = await fetch(`${SUPABASE_URL}/functions/v1/analyze-plant`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+      'apikey': SUPABASE_ANON_KEY,
+      'Authorization': `Bearer ${session?.access_token ?? SUPABASE_ANON_KEY}`,
     },
     body: JSON.stringify({ image_base64: base64, media_type: mediaType }),
   });
